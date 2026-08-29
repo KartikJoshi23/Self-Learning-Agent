@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Cached data (regenerate with the fetchers; never commit raw data)
+rimal/data/cache/
+*.parquet
+*.nc
+*.h5
+
+# Experiment outputs
+runs/
+wandb/
+outputs/
+*.pt
+*.ckpt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
