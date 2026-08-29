@@ -1,0 +1,12 @@
+# Core (M0-M3)
+numpy>=2.1
+pandas>=2.2
+pyarrow>=17
+scipy>=1.14
+requests>=2.32
+pvlib>=0.11
+gymnasium>=1.0
+matplotlib>=3.9
+
+# Test
+pytest>=8.0

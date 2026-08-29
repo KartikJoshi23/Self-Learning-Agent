@@ -1,0 +1,18 @@
+[project]
+name = "rimal"
+version = "0.1.0.dev0"
+description = "Risk-aware Intelligent Maintenance under Aeolian Loading - a reinforcement learning benchmark for photovoltaic soiling and cleaning dispatch in desert conditions."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["rimal*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: test requires network access (deselect with '-m \"not network\"')"]

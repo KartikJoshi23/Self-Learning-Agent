@@ -13,11 +13,11 @@
 
 | Field | Value |
 |---|---|
-| **Current phase** | **Phase 3 — Implementation plan** |
-| **Phase state** | Research complete + **audited and corrected**. Concept approved by Master. Phase 3 implementation plan delivered; **awaiting Master approval** |
-| **Blocked on** | Master's approval of `IMPLEMENTATION-PLAN.md` |
-| **Next action** | Master reviews `IMPLEMENTATION-PLAN.md` and approves / adjusts scope. On approval: begin **M0** (repo scaffold + data fetchers). Also outstanding: read arXiv:2603.07518 in full before M2 freezes the env design. |
-| **Code written so far** | **None** — deliberately. Development is gated behind Phase 3 approval. |
+| **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
+| **Phase state** | Tier 1 approved. **M0 complete and verified (10/10 acceptance checks).** M1 next. |
+| **Blocked on** | Nothing. |
+| **Next action** | **M1** — physics core: pvlib ModelChain hourly yield + Kimber soiling calibrated to DEWA 0.14-0.33 %/day, HSU as cross-check. Acceptance: uncleaned accumulation reproduces DEWA daily rates AND annual specific yield lands in 1,700-1,900 kWh/kWp. Also outstanding: read arXiv:2603.07518 in full before M2 freezes the env design. |
+| **Code written so far** | `rimal/config.py`, `rimal/data/power.py`, `tests/test_power.py` (14 tests, all passing), `scripts/m0_verify.py`. |
 
 ---
 
@@ -30,8 +30,8 @@ Master's explicit approval before the next phase begins.
 |---|---|---|---|
 | 1 | Read + confirm methodology (`Problem-Solving-Skill.md`) | ✅ Complete | ✅ Yes — 2026-08-29 |
 | 2 | Deep research + agent concept proposal | ✅ Complete (audited, 8 corrections) | ✅ Yes — 2026-08-29 |
-| 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ⏳ **Pending** |
-| 4 | Development | ⬜ Not started | ⬜ Not reached |
+| 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ✅ **Tier 1 approved** — 2026-08-29 |
+| 4 | Development — Tier 1 (M0–M4) | 🔵 In progress: M0 ✅, M1 next | — |
 
 ---
 
@@ -40,6 +40,7 @@ Master's explicit approval before the next phase begins.
 These do not change without the Master saying so explicitly.
 
 - **Zero cost.** No paid APIs, no paid compute, no paid datasets, no cloud bills.
+- **Repository is public** and stays public (Master decision, 2026-08-29).
 - **Laptop-only.** Must train and evaluate on a CPU laptop. No GPU cluster assumed.
 - **Employability first, government pitch second.** The primary deliverable is a
   portfolio-grade, interview-defensible build. A government pitch is a follow-on
@@ -76,13 +77,33 @@ These do not change without the Master saying so explicitly.
 
 ---
 
-## Next up (not yet started)
+### Phase 4 / M0 — Data layer (complete, verified 2026-08-29)
+- Project scaffold: `pyproject.toml`, `requirements.txt`, `.venv`, pytest config.
+- `rimal/config.py` — site constants and DEWA-derived calibration values, each traced to source.
+- `rimal/data/power.py` — NASA POWER hourly fetcher, per-year chunking, parquet cache,
+  `-999` fill-value handling, local-time and daily-summary helpers.
+- 14 tests passing (12 offline + 2 live-API guards).
+- **`scripts/m0_verify.py` — 10/10 acceptance checks PASSED.** Figure at `figures/m0_ghi_aod.png`.
 
-- **Immediately:** Master's decision on `IMPLEMENTATION-PLAN.md`.
-- **On approval:** begin **M0** — repo scaffold, CI, and data fetchers for
-  Seih Al-Dahal (NASA POWER + Copernicus CAMS), cached to parquet.
+**Two findings from M0 worth carrying forward:**
+1. **NASA POWER serves `AOD_55` hourly.** One API supplies both irradiance and the dust
+   driver, with no registration. **Copernicus CAMS leaves the critical path; risk R6 closed.**
+2. **The hourly JSON cap is on payload size, not time span.** Measured: 9 parameters x 3
+   years succeeds, 9 x 5 is rejected (HTTP 422), 4 x 5 succeeds — the cap sits between 27
+   and 45 parameter-years. An earlier belief that ">1 year is rejected" was wrong and has
+   been corrected in code, docstring and test. Per-year chunking retained as it is
+   comfortably inside the cap.
+
+---
+
+## Next up
+
+- **M1** — physics core. pvlib `ModelChain` hourly yield; Kimber soiling calibrated to
+  DEWA 0.14-0.33 %/day; HSU as cross-check.
+  **Acceptance (declared before build):** uncleaned accumulation reproduces DEWA measured
+  daily rates, *and* annual specific yield lands in the published Dubai band of
+  1,700-1,900 kWh/kWp. If either fails, the physics is wrong — stop, do not proceed to M2.
 - **Before M2:** read arXiv:2603.07518 in full and close the open unverified claim.
-- **Not before Phase 3 is approved:** any code at all.
 
 ---
 
@@ -92,9 +113,10 @@ These do not change without the Master saying so explicitly.
 |---|---|---|---|
 | 1 | ~~Approve the concept?~~ | Master session | ✅ Approved 2026-08-29 |
 | 2 | ~~Repo needed.~~ Provided: https://github.com/KartikJoshi23/Self-Learning-Agent | Master session | ✅ Resolved 2026-08-29 |
-| 3 | Is a public open-source release (benchmark + agent) desired? It materially raises the employability signal but commits us to code quality and documentation. | Master session | ⏳ Open |
-| 4 | Approve `IMPLEMENTATION-PLAN.md`? Recommended: ship **Tier 1 (M0–M4)** first, then re-decide on Tiers 2–3. | Master session | ⏳ Open |
-| 5 | Authorise the initial `git push` to GitHub? (First push publishes repo contents.) | Master session | ⏳ Open |
+| 3 | ~~Public release?~~ | Master session | ✅ **Public, and staying public** — 2026-08-29 |
+| 4 | ~~Approve implementation plan?~~ | Master session | ✅ **Tier 1 approved** 2026-08-29 |
+| 6 | Approve Tiers 2-3 once Tier 1 lands? | Master session | ⏳ Deferred until M4 |
+| 5 | ~~Authorise the initial push?~~ | Master session | ✅ Authorised and pushed 2026-08-29 |
 
 ---
 
@@ -103,7 +125,7 @@ These do not change without the Master saying so explicitly.
 | # | Blocker | Impact | Status |
 |---|---|---|---|
 | 1 | ~~No git repository initialised.~~ | — | ✅ Resolved 2026-08-29: repo initialised, remote wired to https://github.com/KartikJoshi23/Self-Learning-Agent |
-| 2 | Initial push to GitHub not yet performed (awaiting Master's go-ahead — first push publishes the repo contents). | Collaborator handoff cannot run until origin/main exists. | 🟠 Open |
+| 2 | ~~Initial push not performed.~~ | — | ✅ Resolved 2026-08-29: `origin/main` exists; collaborator handoff is live. |
 
 ---
 
@@ -138,6 +160,8 @@ Eight errors were found in the original Phase 2 presentation and corrected. Full
 | `HANDOFF.md` | Collaboration and sync rules. |
 | `RESEARCH.md` | Approved Phase 2 concept + evidence base + audit log. |
 | `IMPLEMENTATION-PLAN.md` | Phase 3 plan: design decisions, milestones M0–M10, verification strategy. |
+| `README.md` | Public front door; current verified results. |
+| `scripts/m0_verify.py` | The M0 acceptance check. Re-run it if the data layer changes. |
 
 ---
 
@@ -147,6 +171,7 @@ Newest first. Every session appends one row before stopping.
 
 | Date | Machine | Who | Phase | What advanced | Commit |
 |---|---|---|---|---|---|
+| 2026-08-29 | Master laptop | Master | 3 → 4 | Tier 1 approved; pushed to GitHub (public). **Completed M0:** scaffold, venv, NASA POWER fetcher with per-year chunking + parquet cache, 14 passing tests, `scripts/m0_verify.py` **passing 10/10**. Found NASA POWER serves `AOD_55` hourly (drops CAMS, closes risk R6); corrected a wrong belief about the API span limit (it is a payload-size cap). Wrote `README.md`. | *(this commit)* |
 | 2026-08-29 | Master laptop | Master | 2 → 3 | **Audited Phase 2 research: found and corrected 8 errors (2 material).** Rewrote findings into `RESEARCH.md` with full audit log. Delivered `IMPLEMENTATION-PLAN.md` (Phase 3): design decisions, M0–M10, verification strategy, collaborator split. Initialised git; wired GitHub remote. No code written. | *(this commit)* |
 | 2026-08-29 | Master laptop | Master | 1 → 2 | Read and confirmed methodology. Ran full Phase 2 research (UAE government strategy, UAE AI hiring market, PV soiling + RL literature, free-data feasibility). Evaluated five candidate concepts; recommended RIMAL. Created `HANDOFF.md` and `PROGRESS.md`. No code written. | *(pre-repo)* |
 
