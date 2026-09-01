@@ -181,9 +181,18 @@ class PPOPolicy:
             return int(torch.argmax(logits).item())
 
 
-def make_env(env_config: EnvConfig, seed: int, index: int):
+def make_env(env_config: EnvConfig, seed: int, index: int, wrapper=None):
+    """Build one environment, optionally wrapped.
+
+    ``wrapper`` is applied before the statistics recorder so that a wrapper
+    which alters the observation (e.g. ``BeliefStateWrapper``) is part of what
+    the policy sees, while episode returns stay those of the raw environment.
+    """
+
     def thunk():
         env = RimalCleaningEnv(env_config)
+        if wrapper is not None:
+            env = wrapper(env)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed + index)
         return env
@@ -204,6 +213,7 @@ def train(
     *,
     seed: int = 0,
     progress: bool = True,
+    wrapper=None,
 ) -> tuple[ActorCritic, RunningNorm, TrainingLog]:
     """Train PPO and return the network, its observation normaliser and a log."""
     config = config or PPOConfig()
@@ -213,7 +223,7 @@ def train(
     torch.manual_seed(seed)
 
     envs = gym.vector.SyncVectorEnv(
-        [make_env(env_config, seed, i) for i in range(config.num_envs)]
+        [make_env(env_config, seed, i, wrapper) for i in range(config.num_envs)]
     )
     obs_dim = int(np.prod(envs.single_observation_space.shape))
     n_actions = int(envs.single_action_space.n)

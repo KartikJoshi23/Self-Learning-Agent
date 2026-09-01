@@ -1,5 +1,6 @@
 """Rule-based cleaning policies used as baselines."""
 
+from rimal.baselines.belief import BeliefThreshold, ScheduleAwareThreshold
 from rimal.baselines.policies import (
     AlwaysClean,
     FixedInterval,
@@ -17,6 +18,8 @@ __all__ = [
     "AlwaysClean",
     "FixedInterval",
     "SoilingThreshold",
+    "BeliefThreshold",
+    "ScheduleAwareThreshold",
     "standard_baselines",
     "tune_threshold",
     "tune_fixed_interval",

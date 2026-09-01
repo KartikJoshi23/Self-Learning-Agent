@@ -9,6 +9,8 @@ from rimal.env.cleaning_env import (
     register,
 )
 from rimal.env.energy_table import EnergyLookup, build_energy_table
+from rimal.env.belief_wrapper import BeliefStateWrapper
+from rimal.env.observation import ObservationNoise, SoilingKalmanFilter
 
 __all__ = [
     "RimalCleaningEnv",
@@ -19,4 +21,7 @@ __all__ = [
     "register",
     "build_energy_table",
     "EnergyLookup",
+    "ObservationNoise",
+    "SoilingKalmanFilter",
+    "BeliefStateWrapper",
 ]

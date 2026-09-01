@@ -48,6 +48,7 @@ from gymnasium import spaces
 from rimal.config import MBR_SOLAR_PARK, SOILING, Site
 from rimal.data import power
 from rimal.env.energy_table import EnergyLookup, build_energy_table
+from rimal.env.observation import ObservationNoise
 from rimal.physics.soiling import AodModulatedSoiling, KimberSoiling
 
 ACTION_NOOP = 0
@@ -114,6 +115,22 @@ class EnvConfig:
     #: this choice cannot flatter the numbers.
     reward_mode: str = "negative_cost"
 
+    #: What the agent can see of the soiling state (M5 onwards).
+    #:
+    #: ``"exact"`` -- the true soiling ratio, as in v0. A 7-dimensional
+    #: observation. Kept unchanged so the M4 result stays reproducible.
+    #:
+    #: ``"noisy"`` -- a noisy performance-ratio estimate in place of the truth,
+    #: plus two dimensions an operator genuinely has and a filter needs: the
+    #: day's observed rainfall (which drives natural washing) and the noise
+    #: scale implied by the day's irradiance. 9-dimensional.
+    #:
+    #: The truth is still reported in ``info["soiling_ratio"]`` for scoring and
+    #: for measuring belief error -- it is simply not visible to the policy.
+    observability: str = "exact"
+    #: Noise model used when ``observability == "noisy"``.
+    observation_noise: ObservationNoise = field(default_factory=ObservationNoise)
+
 
 class RimalCleaningEnv(gym.Env):
     """Decide daily whether to clean a desert PV plant.
@@ -169,6 +186,8 @@ class RimalCleaningEnv(gym.Env):
             raise ValueError(f"unknown soiling_model {self.config.soiling_model!r}")
         if self.config.reward_mode not in ("net_value", "negative_cost"):
             raise ValueError(f"unknown reward_mode {self.config.reward_mode!r}")
+        if self.config.observability not in ("exact", "noisy"):
+            raise ValueError(f"unknown observability {self.config.observability!r}")
 
         # Daily accumulation rates and rain, precomputed once.
         self._rate = self._model.daily_rate(self._daily).to_numpy(dtype=float)
@@ -186,10 +205,20 @@ class RimalCleaningEnv(gym.Env):
             if rows.size == 0:
                 raise ValueError(f"no data for requested year {year}")
 
+        self.noisy = self.config.observability == "noisy"
+        #: Reference irradiance for the heteroscedastic noise scale: the median
+        #: clean-plant day, so a typical day carries roughly ``base_std``.
+        self._reference_kwh = float(np.median(self._lookup.values[:, -1]))
+
         self.action_space = spaces.Discrete(2)
+        low = [0.0, 0.0, 0.0, -1.0, 0.0, -1.0, -1.0]
+        high = [1.3, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0]
+        if self.noisy:
+            low += [0.0, 0.0]          # observed rainfall, noise scale
+            high += [5.0, 1.0]
         self.observation_space = spaces.Box(
-            low=np.array([0.0, 0.0, 0.0, -1.0, 0.0, -1.0, -1.0], dtype=np.float32),
-            high=np.array([1.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0], dtype=np.float32),
+            low=np.array(low, dtype=np.float32),
+            high=np.array(high, dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -198,6 +227,9 @@ class RimalCleaningEnv(gym.Env):
         self._soiling_loss = 0.0
         self._days_since_cleaning = 0
         self._grace_remaining = 0
+        self._last_observed_ratio = 1.0
+        self._last_observation_std = 0.0
+        self._obs_rng = np.random.default_rng(0)
 
     # -- gymnasium API ---------------------------------------------------
 
@@ -213,6 +245,7 @@ class RimalCleaningEnv(gym.Env):
             raise ValueError(f"year {year} is not in config.years")
 
         self._rows = self._episode_starts[year]
+        self._obs_rng = np.random.default_rng(self.np_random.integers(0, 2**31 - 1))
         self._step_in_episode = 0
         self._soiling_loss = 0.0
         self._days_since_cleaning = 0
@@ -266,6 +299,11 @@ class RimalCleaningEnv(gym.Env):
             "cleaning_cost_usd": cost,
             "cleaned": cleaned,
             "date": self._daily.index[row],
+            "rain_mm": float(self._rain[row]),
+            "soiling_rate": float(self._rate[row]),
+            "rain_reset": bool(self._rain[row] > self._model.cleaning_threshold_mm),
+            "observed_ratio": self._last_observed_ratio,
+            "observation_std": self._last_observation_std,
         }
 
         # Advance soiling into tomorrow, applying rain the same way the
@@ -297,18 +335,34 @@ class RimalCleaningEnv(gym.Env):
     def _observation(self) -> np.ndarray:
         row = self._rows[self._step_in_episode]
         angle = 2.0 * np.pi * self._doy[row] / 365.25
-        return np.array(
-            [
-                1.0 - self._soiling_loss,
-                self._days_since_cleaning / self.config.max_days_since_cleaning,
-                self._aod[row] / self.AOD_SCALE,
-                self._temp[row] / self.TEMP_SCALE,
-                self._wind[row] / self.WIND_SCALE,
-                np.sin(angle),
-                np.cos(angle),
-            ],
-            dtype=np.float32,
-        )
+        true_ratio = 1.0 - self._soiling_loss
+
+        if self.noisy:
+            clean_kwh = self._lookup.clean_energy_kwh(row)
+            reported, std = self.config.observation_noise.observe(
+                true_ratio, clean_kwh, self._reference_kwh, self._obs_rng
+            )
+        else:
+            reported, std = true_ratio, 0.0
+
+        self._last_observed_ratio = reported
+        self._last_observation_std = std
+
+        features = [
+            reported,
+            self._days_since_cleaning / self.config.max_days_since_cleaning,
+            self._aod[row] / self.AOD_SCALE,
+            self._temp[row] / self.TEMP_SCALE,
+            self._wind[row] / self.WIND_SCALE,
+            np.sin(angle),
+            np.cos(angle),
+        ]
+        if self.noisy:
+            features += [
+                min(self._rain[row] / 10.0, 5.0),
+                min(std / 0.2, 1.0),
+            ]
+        return np.array(features, dtype=np.float32)
 
 
 def register() -> None:
