@@ -14,10 +14,10 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | Tier 1 approved. **M0 audited (11/11) and M1 complete and verified (10/10).** M2 next. |
+| **Phase state** | Tier 1 approved. **M0 (11/11), M1 (10/10), M2 (10/10) complete and verified.** M3 next. |
 | **Blocked on** | Nothing. |
-| **Next action** | **M2** — Gymnasium environment v0 (fully observable soiling, single deterministic cleaning action). Acceptance: `gymnasium.utils.env_checker` passes; always-clean > periodic > never-clean on energy and the reverse on cost. **Blocking prerequisite: read arXiv:2603.07518 in full before the env design is frozen.** |
-| **Code written so far** | `rimal/config.py`, `rimal/data/power.py`, `rimal/physics/{plant,soiling}.py`, 31 passing tests, `scripts/m0_verify.py` (11/11), `scripts/m1_verify.py` (10/10). |
+| **Next action** | **M3** — baselines + metric harness (fixed-28, fixed-34, PR-threshold; net-value metric; CVaR@5%). **This is the falsification gate for the whole project:** sweep the cleaning interval and confirm the optimum lands near 28–34 days. If the simulator disagrees with the literature, the simulator is wrong. Note the M2 rollout already hints the default $300/MWp cleaning cost may be too high — a 30-day policy beats never-clean by only ~$473/MWp/yr — so M3 must sweep the cost ratio rather than trust it. |
+| **Code written so far** | `rimal/{config,data,physics,env}`, **49 passing tests**, `scripts/m0_verify.py` (11/11), `m1_verify.py` (10/10), `m2_verify.py` (10/10). |
 
 ---
 
@@ -31,7 +31,7 @@ Master's explicit approval before the next phase begins.
 | 1 | Read + confirm methodology (`Problem-Solving-Skill.md`) | ✅ Complete | ✅ Yes — 2026-08-29 |
 | 2 | Deep research + agent concept proposal | ✅ Complete (audited, 8 corrections) | ✅ Yes — 2026-08-29 |
 | 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ✅ **Tier 1 approved** — 2026-08-29 |
-| 4 | Development — Tier 1 (M0–M4) | 🔵 In progress: M0 ✅ M1 ✅, M2 next | — |
+| 4 | Development — Tier 1 (M0–M4) | 🔵 In progress: M0 ✅ M1 ✅ M2 ✅, M3 next | — |
 
 ---
 
@@ -129,15 +129,44 @@ available data.
 
 ---
 
+### Phase 4 / M2 — Gymnasium environment v0 (complete, verified 2026-08-29)
+- Read **arXiv:2603.07518 in full** (the blocking prerequisite). Formulation: state =
+  deposition + days-since-cleaning + temperature + wind + PM + irradiance (**soiling
+  directly observable**); binary action; Eq. (4) resets soiling to **exactly 0**
+  (perfect cleaning); synthetic weather from fitted monthly distributions; **sparse
+  reward once per 20-year episode**. **All four RIMAL differentiation axes confirmed
+  unclaimed.** The paper independently names our CVaR gap as its own limitation
+  ("suboptimal policies when faced with rare or extreme conditions").
+- `rimal/env/cleaning_env.py` — `Rimal-Cleaning-v0`, daily step, 7-dim observation,
+  binary action, dense daily reward, one-calendar-year episodes over real data.
+- `rimal/env/energy_table.py` — precomputed energy vs soiling ratio, interpolated at
+  step time. **Linear scaling was measured to be up to 2.0% wrong** (a soiled array
+  clips less and runs cooler) — the same order as the margin a policy competes for —
+  so the true pvlib chain is tabulated instead. Worst annual error 0.0019%.
+- **`scripts/m2_verify.py` — 10/10 PASSED.** Tests 31 → 49.
+
+**One defect found while verifying — in the check, not the environment.** The
+soiling-trajectory comparison was misaligned twice: (a) a year's daily frame depends
+on the fetch span, since the first local day of a year needs the prior year's final
+UTC hours (2020 alone → 365 days from 02 Jan; 2016-2025 → 366 from 01 Jan); and (b)
+the reference ran continuously from 2016, carrying December 2019's soiling into an
+episode that starts clean. Both fixed; trajectories now agree to **0.00e+00**.
+
+---
+
 ## Next up
 
-- **M2** — Gymnasium environment v0: fully observable soiling, single deterministic
-  cleaning action.
-  **Acceptance (declared before build):** `gymnasium.utils.env_checker` passes; the
-  sanity ordering holds (always-clean > periodic > never-clean on energy, reversed on
-  cost).
-- **Blocking prerequisite for M2:** read arXiv:2603.07518 in full and close the open
-  unverified claim, before the environment design is frozen.
+- **M3** — baselines + metric harness: fixed-28, fixed-34, PR-threshold; net-value
+  metric; CVaR@5%; constraint accounting.
+  **Acceptance (declared before build):** sweeping the cleaning interval must put the
+  optimum near **28–34 days**, reproducing the published result. **This is the
+  falsification gate for the entire project** — if the simulator disagrees with the
+  literature, the simulator is wrong, and no agent trained on it means anything.
+- **Carry into M3:** the default economics (`$300/MWp` per clean, `$0.016953/kWh`
+  phase-5 PPA tariff) are an assumption, and the M2 rollout suggests the cleaning cost
+  may be too high — a 30-day policy beat never-clean by only ~$473/MWp/yr. M3 must
+  sweep the cost ratio and report what ratio reproduces the published optimum, rather
+  than tuning the cost to force the gate to pass.
 
 ---
 
@@ -170,7 +199,8 @@ believed true but were **not** confirmed against the primary source:
 
 | Claim | Why unverified | How to close |
 |---|---|---|
-| Exact state / action / reward formulation of arXiv:2603.07518 (Heungjo An, *RL-based dynamic cleaning scheduling framework for solar energy system*), and whether it treats soiling as latent. | Abstract confirmed via arXiv, but the abstract does not state the formulation. Full PDF not yet read. | **Read the PDF before milestone M2 freezes the environment design.** This determines which of the four differentiation axes are genuinely unclaimed. |
+| ~~Exact formulation of arXiv:2603.07518~~ **CLOSED 2026-08-29** — paper read in full; formulation recorded in `rimal/env/cleaning_env.py`. All four differentiation axes confirmed unclaimed. | — | Closed. |
+| *(superseded)* Exact state / action / reward formulation of arXiv:2603.07518 (Heungjo An, *RL-based dynamic cleaning scheduling framework for solar energy system*), and whether it treats soiling as latent. | Abstract confirmed via arXiv, but the abstract does not state the formulation. Full PDF not yet read. | **Read the PDF before milestone M2 freezes the environment design.** This determines which of the four differentiation axes are genuinely unclaimed. |
 | `max_soiling = 0.3` (the 30% cap on accumulated loss) is pvlib's Kimber default, not a DEWA-calibrated value. The never-cleaned baseline spends long stretches pinned at this cap, so it carries real weight in that baseline. | Not site-calibrated; no published MBR figure found. | Low risk for M3/M4 because a cleaning agent rarely reaches the cap. Revisit if the never-clean baseline turns out to matter to a conclusion. |
 | DEWA Autonomous Soiling Detector specifics. | dewa.gov.ae returns HTTP 403 to automated fetch; details taken from the UAE Media Office mirror. | Read the DEWA press release directly in a browser. Low impact — not load-bearing for the design. |
 
