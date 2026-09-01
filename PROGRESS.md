@@ -14,10 +14,10 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | Tier 1 approved. **M0 complete and verified (10/10 acceptance checks).** M1 next. |
+| **Phase state** | Tier 1 approved. **M0 audited (11/11) and M1 complete and verified (10/10).** M2 next. |
 | **Blocked on** | Nothing. |
-| **Next action** | **M1** — physics core: pvlib ModelChain hourly yield + Kimber soiling calibrated to DEWA 0.14-0.33 %/day, HSU as cross-check. Acceptance: uncleaned accumulation reproduces DEWA daily rates AND annual specific yield lands in 1,700-1,900 kWh/kWp. Also outstanding: read arXiv:2603.07518 in full before M2 freezes the env design. |
-| **Code written so far** | `rimal/config.py`, `rimal/data/power.py`, `tests/test_power.py` (14 tests, all passing), `scripts/m0_verify.py`. |
+| **Next action** | **M2** — Gymnasium environment v0 (fully observable soiling, single deterministic cleaning action). Acceptance: `gymnasium.utils.env_checker` passes; always-clean > periodic > never-clean on energy and the reverse on cost. **Blocking prerequisite: read arXiv:2603.07518 in full before the env design is frozen.** |
+| **Code written so far** | `rimal/config.py`, `rimal/data/power.py`, `rimal/physics/{plant,soiling}.py`, 31 passing tests, `scripts/m0_verify.py` (11/11), `scripts/m1_verify.py` (10/10). |
 
 ---
 
@@ -31,7 +31,7 @@ Master's explicit approval before the next phase begins.
 | 1 | Read + confirm methodology (`Problem-Solving-Skill.md`) | ✅ Complete | ✅ Yes — 2026-08-29 |
 | 2 | Deep research + agent concept proposal | ✅ Complete (audited, 8 corrections) | ✅ Yes — 2026-08-29 |
 | 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ✅ **Tier 1 approved** — 2026-08-29 |
-| 4 | Development — Tier 1 (M0–M4) | 🔵 In progress: M0 ✅, M1 next | — |
+| 4 | Development — Tier 1 (M0–M4) | 🔵 In progress: M0 ✅ M1 ✅, M2 next | — |
 
 ---
 
@@ -96,14 +96,48 @@ These do not change without the Master saying so explicitly.
 
 ---
 
+### Phase 4 / M1 — Physics core (complete, verified 2026-08-29)
+- `rimal/physics/plant.py` — pvlib PVWatts ModelChain; Erbs decomposition from GHI;
+  soiling applied as a derate on the irradiance components; specific-yield helpers.
+- `rimal/physics/soiling.py` — `KimberSoiling` (constant rate) and
+  `AodModulatedSoiling` (rate scales with AOD), sharing one accumulation core.
+- **`scripts/m1_verify.py` — 10/10 PASSED.** Yield 1703-1802 kWh/kWp (Solargis 1791.5);
+  Kimber 0.235 %/day and AOD-modulated 0.224 %/day, both inside DEWA's 0.14-0.33 band;
+  never-cleaned loss 17.55% / 17.27%, models agreeing within 0.28%.
+- Tests 16 -> 31. Figure at `figures/m1_physics.png`.
+
+**Three defects found while verifying M1 (all fixed):**
+1. **Rainfall was 24x too high.** Hourly `PRECTOTCORR` is a **mm/day rate**, not a
+   per-hour depth, so summing it overcounted 24x — Dubai showed 4,405 mm/yr against a
+   real ~80-110. Rain is the natural-cleaning trigger, so this turned 4 washing days a
+   year into 40 and made a never-cleaned plant look like it lost only 2.8% of its
+   energy. Now averaged; 2020 totals 171.5 mm against POWER's own daily product at
+   171.4. A network test pins this so it cannot regress.
+2. **POWER's irradiance components do not close** against its own GHI (95.1%), putting
+   yield below the band. DNI/DHI now derived from GHI via Erbs (closure 1.0000); POA
+   ~2323 kWh/m2 vs Global Solar Atlas GTI 2336.2, a 0.6% match. **The acceptance band
+   was not widened — the model was fixed.**
+3. **The phantom-local-day bug survived in the yield path.** Now factored into
+   `power.complete_local_days()` and used by every consumer.
+
+**Deviation from the approved plan:** the plan named pvlib's **HSU** model as the
+soiling cross-check. HSU needs PM2.5/PM10 and NASA POWER serves neither (verified
+against both parameter catalogues); sourcing PM would add a registration-gated dataset
+and break the zero-friction data path. `AodModulatedSoiling` replaces it, serving the
+same purpose — an independent deposition mechanism for model-robustness — from
+available data.
+
+---
+
 ## Next up
 
-- **M1** — physics core. pvlib `ModelChain` hourly yield; Kimber soiling calibrated to
-  DEWA 0.14-0.33 %/day; HSU as cross-check.
-  **Acceptance (declared before build):** uncleaned accumulation reproduces DEWA measured
-  daily rates, *and* annual specific yield lands in the published Dubai band of
-  1,700-1,900 kWh/kWp. If either fails, the physics is wrong — stop, do not proceed to M2.
-- **Before M2:** read arXiv:2603.07518 in full and close the open unverified claim.
+- **M2** — Gymnasium environment v0: fully observable soiling, single deterministic
+  cleaning action.
+  **Acceptance (declared before build):** `gymnasium.utils.env_checker` passes; the
+  sanity ordering holds (always-clean > periodic > never-clean on energy, reversed on
+  cost).
+- **Blocking prerequisite for M2:** read arXiv:2603.07518 in full and close the open
+  unverified claim, before the environment design is frozen.
 
 ---
 
@@ -137,6 +171,7 @@ believed true but were **not** confirmed against the primary source:
 | Claim | Why unverified | How to close |
 |---|---|---|
 | Exact state / action / reward formulation of arXiv:2603.07518 (Heungjo An, *RL-based dynamic cleaning scheduling framework for solar energy system*), and whether it treats soiling as latent. | Abstract confirmed via arXiv, but the abstract does not state the formulation. Full PDF not yet read. | **Read the PDF before milestone M2 freezes the environment design.** This determines which of the four differentiation axes are genuinely unclaimed. |
+| `max_soiling = 0.3` (the 30% cap on accumulated loss) is pvlib's Kimber default, not a DEWA-calibrated value. The never-cleaned baseline spends long stretches pinned at this cap, so it carries real weight in that baseline. | Not site-calibrated; no published MBR figure found. | Low risk for M3/M4 because a cleaning agent rarely reaches the cap. Revisit if the never-clean baseline turns out to matter to a conclusion. |
 | DEWA Autonomous Soiling Detector specifics. | dewa.gov.ae returns HTTP 403 to automated fetch; details taken from the UAE Media Office mirror. | Read the DEWA press release directly in a browser. Low impact — not load-bearing for the design. |
 
 ### Closed by the 2026-08-29 audit
