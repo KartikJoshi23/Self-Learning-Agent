@@ -31,6 +31,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from scipy import stats  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 warnings.filterwarnings("ignore")
@@ -60,9 +61,19 @@ NOISE_LEVELS = (0.01, 0.03, 0.06, 0.10)
 THRESHOLD = 0.93
 
 
-def check(name: str, passed: bool, detail: str) -> None:
-    RESULTS.append((name, passed, detail))
-    print(f"  {'PASS' if passed else 'FAIL'}  {name}: {detail}")
+def check(name: str, passed: bool, detail: str, declared: bool = True) -> None:
+    """Record a check.
+
+    ``declared`` marks the criteria the Phase 3 plan actually approved for this
+    milestone. Checks with ``declared=False`` are additional scrutiny this
+    project imposed on itself -- they are reported with the same prominence and
+    still turn the run red, but the distinction matters when reading the
+    verdict: failing a self-imposed harder bar is a finding, not a broken
+    milestone.
+    """
+    RESULTS.append((name, passed, detail, declared))
+    tag = "" if declared else " [scrutiny]"
+    print(f"  {'PASS' if passed else 'FAIL'}  {name}{tag}: {detail}")
 
 
 def noisy_config(years, noise: float) -> EnvConfig:
@@ -230,11 +241,33 @@ def main() -> int:
 
         memoryless = summary.loc["memoryless", "mean"]
         belief_state = summary.loc["belief-state", "mean"]
+
+        # A difference of means is not a result. With a handful of seeds and a
+        # margin of tens of dollars on a base of ~$27,500, "mean A > mean B"
+        # will be satisfied by noise roughly half the time. Require the effect
+        # to survive a test.
+        statistic, pvalue = stats.ttest_ind(
+            ppo.loc[ppo["agent"] == "belief-state", "net_usd"],
+            ppo.loc[ppo["agent"] == "memoryless", "net_usd"],
+            equal_var=False,
+        )
         check(
-            "the belief-state agent beats the memoryless agent under noise",
-            belief_state > memoryless,
+            "the belief-state agent significantly beats the memoryless agent",
+            bool(belief_state > memoryless and pvalue < 0.05),
             f"${belief_state:,.0f} vs ${memoryless:,.0f} "
-            f"({belief_state - memoryless:+,.0f})",
+            f"({belief_state - memoryless:+,.0f}); Welch t={statistic:.2f}, "
+            f"p={pvalue:.3f}, n={args.seeds} per arm",
+        )
+
+        # The comparison that actually matters, and the one most likely to be
+        # quietly omitted: both learned agents against the hand-built rule.
+        belief_rule = float(sweep.loc[sweep["noise"] == 0.03, "belief"].iloc[0])
+        check(
+            "the best learned agent beats the hand-built Kalman+threshold rule",
+            belief_state > belief_rule,
+            f"PPO belief-state ${belief_state:,.0f} vs rule ${belief_rule:,.0f} "
+            f"({belief_state - belief_rule:+,.0f})",
+            declared=False,
         )
 
     # --- Figure -------------------------------------------------------------
