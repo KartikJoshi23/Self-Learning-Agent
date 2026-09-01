@@ -23,3 +23,6 @@ outputs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Energy lookup cache (rebuild with rimal.env.build_energy_table)
+rimal/env/cache/
