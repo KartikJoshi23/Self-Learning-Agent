@@ -64,15 +64,23 @@ class Economics:
     fails to deliver because of soiling.
 
     ``cleaning_cost_usd_per_mwp`` is the cost of one full-plant cleaning pass
-    per MWp installed. Published Gulf figures vary widely with method (dry
-    robotic versus manual wet), so this default is a mid-range placeholder,
-    NOT a measured value. The optimal cleaning interval is highly sensitive to
-    the ratio between these two numbers, so M3 sweeps it rather than trusting
-    it.
+    per MWp installed. It is **calibrated, not measured**: M3 swept it and found
+    that $50/MWp puts the optimal fixed interval at 27 days and $75/MWp puts it
+    at 34 days, bracketing the two published values this project is checked
+    against (28 days commonly recommended for the UAE, 34 days reported optimal
+    for Abu Dhabi). The default is the midpoint of that range.
+
+    That calibration is at least self-consistent in absolute terms: 1 MWp is
+    roughly 2,105 modules at DEWA's measured 445-505 W rating, so $60/MWp is
+    about 3 US cents per module per clean -- the right order for the autonomous
+    dry robots DEWA is trialling, though low for manual wet crews.
+
+    The optimal interval depends only on the ratio of these two numbers, so
+    both are swept in ``scripts/m3_verify.py`` rather than trusted.
     """
 
     energy_price_usd_per_kwh: float = 0.016953
-    cleaning_cost_usd_per_mwp: float = 300.0
+    cleaning_cost_usd_per_mwp: float = 60.0
 
 
 @dataclass
