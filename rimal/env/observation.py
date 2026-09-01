@@ -133,6 +133,25 @@ class SoilingKalmanFilter:
         self.var = self.reset_var
         self.grace_remaining = self.grace_period_days if grace else 0
 
+    def apply_partial_clean(self, expected_efficacy: float, efficacy_std: float) -> None:
+        """Fold in a cleaning that removes only *part* of the soiling.
+
+        ``on_reset_event`` assumes the panel ends perfectly clean, which is what
+        every published formulation assumes and what DEWA's field data
+        contradicts: their five robots achieved 69-99%. After dispatching a
+        machine of uncertain efficacy the belief must be scaled, not zeroed --
+        and its variance must *grow*, because how much was actually removed is
+        now uncertain on top of everything else. The subsequent measurement
+        updates then correct the estimate, and the size of that correction is
+        what reveals the robot's true efficacy.
+        """
+        efficacy = float(np.clip(expected_efficacy, 0.0, 1.0))
+        loss_before = self.loss
+        self.loss = loss_before * (1.0 - efficacy)
+        # Uncertainty in the removed fraction maps to uncertainty in the
+        # remaining loss, proportional to how much there was to remove.
+        self.var = self.var * (1.0 - efficacy) ** 2 + (efficacy_std * loss_before) ** 2
+
     def predict(self, daily_rate: float) -> None:
         if self.grace_remaining > 0:
             self.grace_remaining -= 1

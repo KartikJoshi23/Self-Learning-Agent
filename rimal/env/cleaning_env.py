@@ -49,6 +49,7 @@ from rimal.config import MBR_SOLAR_PARK, SOILING, Site
 from rimal.data import power
 from rimal.env.energy_table import EnergyLookup, build_energy_table
 from rimal.env.observation import ObservationNoise
+from rimal.env.robots import DEWA_FLEET, Fleet, RobotSpec
 from rimal.physics.soiling import AodModulatedSoiling, KimberSoiling
 
 ACTION_NOOP = 0
@@ -131,6 +132,22 @@ class EnvConfig:
     #: Noise model used when ``observability == "noisy"``.
     observation_noise: ObservationNoise = field(default_factory=ObservationNoise)
 
+    #: Cleaning model (M6 onwards).
+    #:
+    #: ``"perfect"`` -- one cleaning action, soiling reset to exactly zero, as
+    #: in v0/v1 and in every published formulation. Kept so M4 and M5 stay
+    #: reproducible.
+    #:
+    #: ``"fleet"`` -- DEWA's five robots. Cleaning removes a *stochastic
+    #: fraction* of accumulated soiling drawn from the machine's current
+    #: health, and each machine wears with use. Actions become
+    #: ``{no-op} u {clean with robot i} u {service robot i}``.
+    cleaning_model: str = "perfect"
+    #: Robot specifications used when ``cleaning_model == "fleet"``.
+    fleet_specs: tuple[RobotSpec, ...] = DEWA_FLEET
+    #: Cost of servicing one robot, USD per MWp. ASSUMPTION; swept in M6.
+    service_cost_usd_per_mwp: float = 25.0
+
 
 class RimalCleaningEnv(gym.Env):
     """Decide daily whether to clean a desert PV plant.
@@ -188,6 +205,8 @@ class RimalCleaningEnv(gym.Env):
             raise ValueError(f"unknown reward_mode {self.config.reward_mode!r}")
         if self.config.observability not in ("exact", "noisy"):
             raise ValueError(f"unknown observability {self.config.observability!r}")
+        if self.config.cleaning_model not in ("perfect", "fleet"):
+            raise ValueError(f"unknown cleaning_model {self.config.cleaning_model!r}")
 
         # Daily accumulation rates and rain, precomputed once.
         self._rate = self._model.daily_rate(self._daily).to_numpy(dtype=float)
@@ -206,16 +225,36 @@ class RimalCleaningEnv(gym.Env):
                 raise ValueError(f"no data for requested year {year}")
 
         self.noisy = self.config.observability == "noisy"
+        self.fleet_mode = self.config.cleaning_model == "fleet"
+        self.fleet = (
+            Fleet(
+                specs=self.config.fleet_specs,
+                service_cost_usd_per_mwp=self.config.service_cost_usd_per_mwp,
+            )
+            if self.fleet_mode
+            else None
+        )
         #: Reference irradiance for the heteroscedastic noise scale: the median
         #: clean-plant day, so a typical day carries roughly ``base_std``.
         self._reference_kwh = float(np.median(self._lookup.values[:, -1]))
 
-        self.action_space = spaces.Discrete(2)
+        if self.fleet_mode:
+            # no-op, then one clean action and one service action per robot
+            self.n_robots = self.fleet.size
+            self.action_space = spaces.Discrete(1 + 2 * self.n_robots)
+        else:
+            self.n_robots = 0
+            self.action_space = spaces.Discrete(2)
+
         low = [0.0, 0.0, 0.0, -1.0, 0.0, -1.0, -1.0]
         high = [1.3, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0]
         if self.noisy:
             low += [0.0, 0.0]          # observed rainfall, noise scale
             high += [5.0, 1.0]
+        if self.fleet_mode:
+            # per robot: days since service, uses since service, cooldown left
+            low += [0.0] * (3 * self.n_robots)
+            high += [1.0] * (3 * self.n_robots)
         self.observation_space = spaces.Box(
             low=np.array(low, dtype=np.float32),
             high=np.array(high, dtype=np.float32),
@@ -246,6 +285,8 @@ class RimalCleaningEnv(gym.Env):
 
         self._rows = self._episode_starts[year]
         self._obs_rng = np.random.default_rng(self.np_random.integers(0, 2**31 - 1))
+        if self.fleet_mode:
+            self.fleet.reset()
         self._step_in_episode = 0
         self._soiling_loss = 0.0
         self._days_since_cleaning = 0
@@ -260,16 +301,48 @@ class RimalCleaningEnv(gym.Env):
         if self._rows is None:
             raise RuntimeError("reset() must be called before step()")
         action = int(action)
-        if action not in (ACTION_NOOP, ACTION_CLEAN):
+        if not self.action_space.contains(action):
             raise ValueError(f"invalid action {action}")
 
         row = self._rows[self._step_in_episode]
         economics = self.config.economics
 
         # The agent's decision applies to today, before today's accumulation.
-        cleaned = action == ACTION_CLEAN
+        # -1 rather than None: Gymnasium's vector envs aggregate info values
+        # into typed arrays and cannot mix None with ints.
+        robot_index: int = -1
+        serviced_index: int = -1
+        realised_efficacy = 0.0
+        service_cost = 0.0
+
+        if self.fleet_mode:
+            if action == ACTION_NOOP:
+                cleaned = False
+            elif action <= self.n_robots:
+                candidate = int(action - 1)
+                # Dispatching a machine that is still cooling down does
+                # nothing. It is not punished beyond the lost day -- an
+                # operator would simply see the robot unavailable.
+                if self.fleet.available(candidate):
+                    cleaned = True
+                    robot_index = candidate
+                else:
+                    cleaned = False
+            else:
+                cleaned = False
+                serviced_index = int(action - 1 - self.n_robots)
+                service_cost = self.fleet.service(serviced_index) * self.config.capacity_mwp
+        else:
+            cleaned = action == ACTION_CLEAN
+
         if cleaned:
-            self._soiling_loss = 0.0
+            if self.fleet_mode:
+                # Partial, stochastic cleaning: a fraction of accumulated
+                # soiling is removed, not all of it.
+                realised_efficacy = self.fleet.clean(robot_index, self._obs_rng)
+                self._soiling_loss *= 1.0 - realised_efficacy
+            else:
+                self._soiling_loss = 0.0
             self._days_since_cleaning = 0
         else:
             self._days_since_cleaning += 1
@@ -304,11 +377,19 @@ class RimalCleaningEnv(gym.Env):
             "rain_reset": bool(self._rain[row] > self._model.cleaning_threshold_mm),
             "observed_ratio": self._last_observed_ratio,
             "observation_std": self._last_observation_std,
+            "robot": robot_index,
+            "serviced": serviced_index,
+            "realised_efficacy": realised_efficacy,
+            "service_cost_usd": service_cost,
         }
+        if self.fleet_mode:
+            info["robot_health"] = self.fleet.health.copy()
 
         # Advance soiling into tomorrow, applying rain the same way the
         # standalone soiling models do so the two agree exactly.
         self._advance_soiling(row)
+        if self.fleet_mode:
+            self.fleet.advance_day()
 
         self._step_in_episode += 1
         terminated = self._step_in_episode >= len(self._rows)
@@ -362,7 +443,10 @@ class RimalCleaningEnv(gym.Env):
                 min(self._rain[row] / 10.0, 5.0),
                 min(std / 0.2, 1.0),
             ]
-        return np.array(features, dtype=np.float32)
+        observation = np.array(features, dtype=np.float32)
+        if self.fleet_mode:
+            observation = np.concatenate([observation, self.fleet.observation()])
+        return observation.astype(np.float32)
 
 
 def register() -> None:

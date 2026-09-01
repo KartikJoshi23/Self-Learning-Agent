@@ -1,6 +1,7 @@
 """Rule-based cleaning policies used as baselines."""
 
 from rimal.baselines.belief import BeliefThreshold, ScheduleAwareThreshold
+from rimal.baselines.fleet import FleetHeuristic, RoundRobinFleet
 from rimal.baselines.policies import (
     AlwaysClean,
     FixedInterval,
@@ -20,6 +21,8 @@ __all__ = [
     "SoilingThreshold",
     "BeliefThreshold",
     "ScheduleAwareThreshold",
+    "FleetHeuristic",
+    "RoundRobinFleet",
     "standard_baselines",
     "tune_threshold",
     "tune_fixed_interval",
