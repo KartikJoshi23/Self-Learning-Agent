@@ -14,10 +14,10 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | **Tier 1 complete** (M0–M4). **Tier 2 approved; M5 complete.** M6 next. |
+| **Phase state** | **Tier 1 complete** (M0–M4). **Tier 2: M5 ✅, M6 ✅ complete.** M7 awaiting Master's decision — see the recommendation below. |
 | **Blocked on** | Nothing. |
-| **Next action** | **M6** — stochastic, heterogeneous cleaning efficacy (DEWA's measured 69–99% across five robots) plus cleaning-robot health as a second latent state. **The sharp question:** does this create structure that filter-plus-threshold cannot express? If not, the honest conclusion is that this problem does not need deep RL. |
-| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **92 passing tests**, `scripts/` verify m0–m5. |
+| **Next action** | **Master decision required.** Four milestones now say the same thing (see *Cross-milestone finding*). Recommendation: run **M7 (CVaR under shamals)** — risk-sensitivity is the one axis a threshold rule genuinely cannot express — and if it also returns negative, **stop and write up** rather than continue adding machinery. |
+| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **110 passing tests**, `scripts/` verify m0–m6. |
 
 ---
 
@@ -32,7 +32,7 @@ Master's explicit approval before the next phase begins.
 | 2 | Deep research + agent concept proposal | ✅ Complete (audited, 8 corrections) | ✅ Yes — 2026-08-29 |
 | 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ✅ **Tier 1 approved** — 2026-08-29 |
 | 4 | Development — Tier 1 (M0–M4) | ✅ Complete | ✅ Approved 2026-08-29 |
-| 5 | Development — Tier 2 (M5–M7) | 🔵 In progress: M5 ✅, M6 next | ✅ Approved 2026-08-29 |
+| 5 | Development — Tier 2 (M5–M7) | 🔵 M5 ✅ M6 ✅; **M7 held for a decision** | ✅ Approved 2026-08-29 |
 
 ---
 
@@ -243,18 +243,65 @@ PPO belief-state $27,565 vs `BeliefThreshold` $27,638 (−$74).
 
 ## Cross-milestone finding: state estimation, not control
 
-Three consecutive milestones now show a model-based rule beating model-free deep RL:
+**Four** consecutive milestones now show a model-based rule beating model-free deep RL:
 M3 (tuned threshold > every fixed interval), M4 (tuned threshold > PPO), M5
-(Kalman+threshold > both PPO variants, and nearly immune to noise that destroys the
-naive rule). **The honest reading is that the hard part of this problem is state
-estimation, not control** — once soiling is known, the control law is a threshold, and
-the 17.6× RMSE reduction that carried M5 came from a Kalman filter, not a network.
+(Kalman+threshold > both PPO variants), M6 (fleet heuristic > PPO by $581, with one seed
+in five collapsing entirely).
 
-This sharpens M6/M7 into a real question rather than a formality: do stochastic cleaning
-efficacy and a degrading actuator create structure that filter-plus-threshold *cannot*
-express? If they do not, the defensible conclusion is that this problem does not need
-deep RL — which is itself a publishable result, and a more credible pitch than a
-manufactured win.
+**M6 was the milestone designed to break the pattern, and it did not.** It asked whether
+stochastic efficacy and a degrading actuator create structure filter-plus-threshold
+cannot express. The answer is no: the fleet dimension is second-order at this plant's
+economics, and the one part that pays is again a *filter* improvement, not a control one.
+
+**The honest reading is that the hard part of this problem is state estimation, not
+control.** Once soiling is known, the control law is a threshold. The single largest
+effect anything has produced in this project is M5's **17.6× belief-RMSE reduction** —
+from a Kalman filter, not a neural network.
+
+**This is not a failed project.** "We built a simulator calibrated to DEWA's own
+measurements, tested four hypotheses about where adaptive control adds value, and found
+the problem is a filtering problem" is a stronger and more credible result than a
+manufactured RL win — and DEWA would recognise an inflated claim about their own asset
+immediately.
+
+**Recommendation to the Master:** run **M7 (CVaR under shamals)**, because risk
+sensitivity is the one axis a threshold rule genuinely cannot express, and M3 already
+hinted at it — `never-clean` had by far the worst CVaR ($22,356) and 10× the variance of
+any cleaning policy. **If M7 also returns negative, stop adding machinery and write up
+the honest conclusion** rather than continuing until something wins.
+
+---
+
+### Phase 4 / M6 — Stochastic efficacy and actuator wear (complete, verified 2026-09-02)
+- `rimal/env/robots.py` — five-robot fleet: stochastic efficacy, latent health, wear,
+  battery cooldown. Fleet mode: 11 actions, 24-dim observation.
+- `FleetHeuristic` / `RoundRobinFleet` — deliberately strong opponents.
+- **Declared criteria 3/4. The failing one is the finding.** Tests 92 → 110.
+
+**Two flaws in this project's own model, both caught by measurement:**
+1. The first fleet had **no dispatch decision at all** — robot A had the highest efficacy
+   *and* low wear, so it dominated forever and "always use A" beat efficacy-aware
+   dispatch. Fixed by modelling DEWA's documented **battery overheating** as a cooldown.
+   Added *after* the flaw was found; recorded as such.
+2. The sweep **never swept** — cleaning frequency was 10.0/yr at every cost because the
+   threshold was held fixed instead of retuned per cost. Redone; frequency now 43→5/yr,
+   and the conclusion survived.
+
+**Findings (held-out, USD/MWp/yr):**
+1. Stochastic partial cleaning is real: **$190/yr (0.7%)** vs the idealised world.
+2. But *assuming* perfect cleaning costs only **$16–69/yr (<0.25%)** — the Kalman filter
+   self-corrects within days. **This corrects Phase 2's own reasoning**, which listed
+   perfect-cleaning as a major unclaimed axis. It is an axis, but a small one.
+3. **Learning which robot is good loses at every cleaning frequency (−$14 to −$117).**
+   Sharp version: **Spearman ρ = 1.00** — the estimator ranks the fleet *perfectly* and
+   still loses, because the exploration is paid for in cleans at $60 each. A
+   short-horizon bandit result.
+4. Graceful degradation holds: a 30× faster-wearing fleet loses only 2.91%.
+
+**PPO on the fleet env (5 seeds):** $26,983 ± 1,085 vs best rule $27,564 (**−$581**).
+**Seed 4 collapsed to never-clean (0.3 cleans/yr).** Excluding it: $27,468 ± 56, still
+−$96. *One seed in five failing to learn at all is a robustness result in its own
+right* — a policy that collapses 20% of the time is not deployable.
 
 ---
 
