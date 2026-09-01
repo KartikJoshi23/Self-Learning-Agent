@@ -115,5 +115,43 @@ def standard_baselines() -> list[Policy]:
         FixedInterval(34),  # reported optimal for Abu Dhabi
         SoilingThreshold(0.97),
         SoilingThreshold(0.95),
+        SoilingThreshold(0.93),  # the tuned optimum; see tune_threshold()
         SoilingThreshold(0.92),
     ]
+
+
+def tune_threshold(
+    evaluate_fn, candidates: np.ndarray | None = None
+) -> SoilingThreshold:
+    """Select the best soiling threshold on TRAINING data.
+
+    This exists because of a mistake worth not repeating. M3 compared against a
+    hand-picked grid of thresholds (0.97, 0.95, 0.92) and reported 0.95 as the
+    bar. A fine sweep later showed the true optimum is **0.93**, worth about $50
+    per MWp per year more -- roughly twice the entire margin PPO had appeared to
+    win by. An under-tuned baseline does not make a learned agent look good; it
+    makes the comparison worthless.
+
+    ``evaluate_fn`` takes a policy and returns its mean net value on the
+    *training* years, so the baseline is selected under exactly the protocol the
+    learned agent gets: tuned on train, reported on held-out.
+    """
+    if candidates is None:
+        candidates = np.round(np.arange(0.86, 0.995, 0.005), 3)
+
+    scored = [(float(evaluate_fn(SoilingThreshold(float(t)))), float(t)) for t in candidates]
+    best = max(scored)[1]
+    policy = SoilingThreshold(best)
+    policy.name = f"tuned-threshold-{best:.3f}"
+    return policy
+
+
+def tune_fixed_interval(evaluate_fn, candidates: range | None = None) -> FixedInterval:
+    """Select the best fixed interval on TRAINING data, same protocol."""
+    if candidates is None:
+        candidates = range(15, 71)
+    scored = [(float(evaluate_fn(FixedInterval(t))), t) for t in candidates]
+    best = max(scored)[1]
+    policy = FixedInterval(best)
+    policy.name = f"tuned-fixed-{best}d"
+    return policy

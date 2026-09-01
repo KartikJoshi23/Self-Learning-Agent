@@ -94,6 +94,25 @@ class EnvConfig:
     capacity_mwp: float = 1.0
     #: Days of history the agent is told about. Only used for normalisation.
     max_days_since_cleaning: int = 365
+    #: What ``step()`` returns as reward. Both share the same optimal policy.
+    #:
+    #: ``"net_value"`` -- revenue minus cleaning cost. The reportable quantity,
+    #: and the natural definition, but a poor *learning* signal: daily revenue
+    #: is order $80 no matter what the agent does, while the action-dependent
+    #: part is order $2.50 of avoided soiling loss. The constant drowns the
+    #: policy gradient, and PPO trained on it learns a near-constant cleaning
+    #: probability rather than a state-dependent rule (measured: P(clean)
+    #: moved only 0.036 -> 0.048 across the entire soiling range).
+    #:
+    #: ``"negative_cost"`` -- minus (soiling loss + cleaning cost). This
+    #: subtracts the clean-plant energy of the day, which depends on the day
+    #: but *not* on the action, so it is a state-dependent baseline: the
+    #: optimal policy is unchanged and only the variance falls. It is also the
+    #: objective the literature actually minimises.
+    #:
+    #: Reported metrics are computed from ``info``, never from the reward, so
+    #: this choice cannot flatter the numbers.
+    reward_mode: str = "negative_cost"
 
 
 class RimalCleaningEnv(gym.Env):
@@ -148,6 +167,8 @@ class RimalCleaningEnv(gym.Env):
         )
         if self.config.soiling_model not in ("kimber", "aod"):
             raise ValueError(f"unknown soiling_model {self.config.soiling_model!r}")
+        if self.config.reward_mode not in ("net_value", "negative_cost"):
+            raise ValueError(f"unknown reward_mode {self.config.reward_mode!r}")
 
         # Daily accumulation rates and rain, precomputed once.
         self._rate = self._model.daily_rate(self._daily).to_numpy(dtype=float)
@@ -228,9 +249,15 @@ class RimalCleaningEnv(gym.Env):
             if cleaned
             else 0.0
         )
-        reward = revenue - cost
-
         clean_energy = self._lookup.clean_energy_kwh(row) * self.config.capacity_mwp
+        if self.config.reward_mode == "net_value":
+            reward = revenue - cost
+        else:
+            soiling_loss_usd = (
+                clean_energy - energy_kwh
+            ) * economics.energy_price_usd_per_kwh
+            reward = -(soiling_loss_usd + cost)
+
         info = {
             "energy_kwh": energy_kwh,
             "clean_energy_kwh": clean_energy,

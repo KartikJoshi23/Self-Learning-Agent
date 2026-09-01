@@ -7,6 +7,8 @@ from rimal.baselines.policies import (
     Policy,
     SoilingThreshold,
     standard_baselines,
+    tune_fixed_interval,
+    tune_threshold,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "FixedInterval",
     "SoilingThreshold",
     "standard_baselines",
+    "tune_threshold",
+    "tune_fixed_interval",
 ]

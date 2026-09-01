@@ -99,9 +99,42 @@ class TestCleaningEnv:
         assert cleaned["soiling_ratio"] == pytest.approx(1.0)
         assert cleaned["cleaned"] is True
         assert cleaned["cleaning_cost_usd"] > 0
+        # Default reward_mode is "negative_cost"; a clean day on an already
+        # clean panel costs exactly the cleaning fee and nothing else.
+        assert reward == pytest.approx(-cleaned["cleaning_cost_usd"])
+
+    def test_net_value_reward_mode(self):
+        env = self._env(reward_mode="net_value")
+        env.reset(seed=0, options={"year": 2020})
+        _, reward, _, _, info = env.step(ACTION_CLEAN)
         assert reward == pytest.approx(
-            cleaned["revenue_usd"] - cleaned["cleaning_cost_usd"]
+            info["revenue_usd"] - info["cleaning_cost_usd"]
         )
+
+    def test_reward_modes_differ_only_by_an_action_independent_constant(self):
+        """The two modes must share an optimal policy.
+
+        They differ by the day's clean-plant revenue, which depends on the day
+        but not on the action -- a state-dependent baseline. If that ever stops
+        holding, the variance-reduced reward would be optimising something else.
+        """
+        price = Economics().energy_price_usd_per_kwh
+        for mode in ("net_value", "negative_cost"):
+            env = self._env(reward_mode=mode)
+            env.reset(seed=0, options={"year": 2020})
+            for _ in range(25):
+                _, reward, _, _, info = env.step(ACTION_NOOP)
+                offset = info["clean_energy_kwh"] * price
+                expected = (
+                    info["revenue_usd"] - info["cleaning_cost_usd"]
+                    if mode == "net_value"
+                    else info["revenue_usd"] - info["cleaning_cost_usd"] - offset
+                )
+                assert reward == pytest.approx(expected, rel=1e-9)
+
+    def test_unknown_reward_mode_rejected(self):
+        with pytest.raises(ValueError, match="unknown reward_mode"):
+            RimalCleaningEnv(EnvConfig(years=(2020,), reward_mode="nope"))
 
     def test_soiling_never_leaves_physical_bounds(self):
         env = self._env()
