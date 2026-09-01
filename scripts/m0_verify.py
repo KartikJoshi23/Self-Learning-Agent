@@ -106,19 +106,33 @@ def main() -> int:
     daily = power.daily_summary(hourly)
     ghi_kwh = daily["ALLSKY_SFC_SW_DWN"] / 1000.0  # Wh/m2 -> kWh/m2
     annual_ghi = ghi_kwh.groupby(ghi_kwh.index.year).sum()
-    # Dubai's global horizontal irradiation is ~2000-2200 kWh/m2/yr.
-    full_years = annual_ghi.iloc[:-1] if len(annual_ghi) > 1 else annual_ghi
-    in_band = full_years.between(1900, 2300).all()
+    day_counts = ghi_kwh.groupby(ghi_kwh.index.year).size()
+
+    # daily_summary() drops partial local days, so every year present must be
+    # whole. If this trips, the boundary handling has regressed.
     check(
-        "annual GHI in the published Dubai band (1900-2300 kWh/m2/yr)",
-        bool(in_band),
-        f"min {full_years.min():.0f}, max {full_years.max():.0f}",
+        "every year is complete (365/366 days)",
+        bool(day_counts.isin([365, 366]).all()),
+        f"day counts {day_counts.min()}-{day_counts.max()} across "
+        f"{len(day_counts)} years ({day_counts.index.min()}-{day_counts.index.max()})",
     )
 
+    # Dubai's global horizontal irradiation is ~2000-2200 kWh/m2/yr.
     check(
-        "ALLSKY never exceeds CLRSKY",
-        bool((daily["ALLSKY_SFC_SW_DWN"] <= daily["CLRSKY_SFC_SW_DWN"] * 1.02).all()),
-        "clear-sky reference bounds measured irradiance",
+        "annual GHI in the published Dubai band (1900-2300 kWh/m2/yr)",
+        bool(annual_ghi.between(1900, 2300).all()),
+        f"min {annual_ghi.min():.0f}, max {annual_ghi.max():.0f} over "
+        f"{len(annual_ghi)} full years",
+    )
+
+    # No tolerance: measured daily irradiation must not exceed the clear-sky
+    # reference. (At hourly resolution it legitimately can, via cloud
+    # enhancement; daily totals must not.)
+    ratio = (daily["ALLSKY_SFC_SW_DWN"] / daily["CLRSKY_SFC_SW_DWN"]).dropna()
+    check(
+        "daily ALLSKY never exceeds CLRSKY (no tolerance)",
+        bool((ratio <= 1.0).all()),
+        f"max ALLSKY/CLRSKY = {ratio.max():.4f}",
     )
 
     # --- Seasonal dust signature ------------------------------------------

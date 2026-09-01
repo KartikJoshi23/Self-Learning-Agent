@@ -44,6 +44,10 @@ CACHE_DIR = Path(__file__).resolve().parent / "cache"
 
 REQUEST_TIMEOUT_S = 180
 
+#: A complete local day. Used to drop the truncated days that the UTC->local
+#: conversion leaves at each end of the record.
+HOURS_PER_DAY = 24
+
 
 class PowerFetchError(RuntimeError):
     """Raised when NASA POWER returns something we cannot use."""
@@ -135,7 +139,8 @@ def fetch_years(
 ) -> pd.DataFrame:
     """Return a continuous hourly frame spanning ``start_year``..``end_year``.
 
-    Chunked one year per request because the API rejects longer hourly spans.
+    Chunked one year per request to stay inside the API's payload-size cap
+    (see the module docstring); the cap is on size, not span.
     """
     if end_year < start_year:
         raise ValueError(f"end_year {end_year} precedes start_year {start_year}")
@@ -170,11 +175,23 @@ def to_local(frame: pd.DataFrame, site: Site = MBR_SOLAR_PARK) -> pd.DataFrame:
     return local
 
 
-def daily_summary(frame: pd.DataFrame, site: Site = MBR_SOLAR_PARK) -> pd.DataFrame:
+def daily_summary(
+    frame: pd.DataFrame,
+    site: Site = MBR_SOLAR_PARK,
+    *,
+    complete_days_only: bool = True,
+) -> pd.DataFrame:
     """Aggregate hourly data to the daily step the cleaning agent acts on.
 
     Irradiance is summed to Wh/m2/day; drivers are averaged; rainfall is summed
     because it is the natural-cleaning trigger in the Kimber soiling model.
+
+    POWER serves UTC, and Dubai is UTC+4, so converting to local time leaves a
+    truncated day at each end of the record -- including a phantom day in the
+    following calendar year holding only four hours. Those partial days would
+    understate daily irradiance and leak a spurious year into any groupby, so
+    by default only days with a full 24 hours are returned. Pass
+    ``complete_days_only=False`` to keep them.
     """
     local = to_local(frame, site)
     aggregations = {
@@ -189,6 +206,11 @@ def daily_summary(frame: pd.DataFrame, site: Site = MBR_SOLAR_PARK) -> pd.DataFr
         "AOD_55": "mean",
     }
     present = {k: v for k, v in aggregations.items() if k in local.columns}
-    daily = local.resample("D").agg(present)
+    resampled = local.resample("D")
+    daily = resampled.agg(present)
+
+    if complete_days_only:
+        daily = daily.loc[resampled.size() == HOURS_PER_DAY]
+
     daily.index.name = "date_local"
     return daily

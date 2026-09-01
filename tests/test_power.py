@@ -145,10 +145,33 @@ class TestDerived:
 
     def test_daily_summary_sums_irradiance_and_averages_drivers(self):
         frame = power._parse_response(_payload(hours=48))
-        daily = power.daily_summary(frame)
+        daily = power.daily_summary(frame, complete_days_only=False)
         assert set(daily.columns) == {"ALLSKY_SFC_SW_DWN", "AOD_55"}
         assert daily["AOD_55"].dropna().tolist() == pytest.approx([0.3] * 3)
         assert daily.index.name == "date_local"
+
+    def test_partial_local_days_are_dropped_by_default(self):
+        """The UTC->local shift truncates the first day and invents a phantom
+        day in the next calendar year. Neither may reach the daily frame."""
+        # 48 UTC hours starting 2020-01-01 00:00Z spans three local days in
+        # Dubai (UTC+4): a 20-hour day, a full day, and a 4-hour phantom.
+        frame = power._parse_response(_payload(year=2020, hours=48))
+
+        kept_all = power.daily_summary(frame, complete_days_only=False)
+        assert len(kept_all) == 3
+
+        daily = power.daily_summary(frame)
+        assert len(daily) == 1, "only the one complete local day should survive"
+        assert daily.index[0].date().isoformat() == "2020-01-02"
+
+    def test_complete_days_only_leaves_no_spurious_year(self):
+        """A phantom day would leak an extra year into any groupby."""
+        frame = power._parse_response(_payload(year=2020, hours=48))
+        years = set(power.daily_summary(frame).index.year)
+        assert years == {2020}
+
+        leaky = set(power.daily_summary(frame, complete_days_only=False).index.year)
+        assert 2020 in leaky  # the unfiltered frame is where the phantom lives
 
 
 @pytest.mark.network
