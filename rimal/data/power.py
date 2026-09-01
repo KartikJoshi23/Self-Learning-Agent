@@ -175,6 +175,23 @@ def to_local(frame: pd.DataFrame, site: Site = MBR_SOLAR_PARK) -> pd.DataFrame:
     return local
 
 
+def complete_local_days(
+    frame: pd.DataFrame, site: Site = MBR_SOLAR_PARK
+) -> pd.DataFrame:
+    """Trim an hourly frame to whole local days.
+
+    POWER serves UTC and Dubai is UTC+4, so tz-converting the record leaves a
+    truncated day at the start and a phantom four-hour day in the *following*
+    calendar year. Left in place, the phantom leaks a spurious near-zero year
+    into any annual groupby and understates the first day's irradiation. Every
+    consumer that groups by day or by year must trim first.
+    """
+    local = to_local(frame, site)
+    hours = local.resample("D").size()
+    whole = hours[hours == HOURS_PER_DAY].index
+    return local[local.index.normalize().isin(whole)]
+
+
 def daily_summary(
     frame: pd.DataFrame,
     site: Site = MBR_SOLAR_PARK,
@@ -183,8 +200,16 @@ def daily_summary(
 ) -> pd.DataFrame:
     """Aggregate hourly data to the daily step the cleaning agent acts on.
 
-    Irradiance is summed to Wh/m2/day; drivers are averaged; rainfall is summed
-    because it is the natural-cleaning trigger in the Kimber soiling model.
+    Irradiance is summed to Wh/m2/day, because POWER serves it as W/m2 and an
+    hourly step makes the sum an energy. Drivers are averaged.
+
+    Rainfall is **averaged, not summed**. POWER declares hourly ``PRECTOTCORR``
+    in ``mm/day`` -- it is an instantaneous rate expressed per day, not a
+    per-hour depth -- so summing the 24 hourly values overcounts by 24x.
+    Verified 2026-08-29 for 2020: the hourly mean totals 171.5 mm/yr against
+    POWER's own daily product at 171.4 mm/yr, while the sum gives 4116 mm.
+    This matters a great deal: rainfall is the natural-cleaning trigger, and
+    the 24x error turned 4 washing days per year into 40.
 
     POWER serves UTC, and Dubai is UTC+4, so converting to local time leaves a
     truncated day at each end of the record -- including a phantom day in the
@@ -193,7 +218,11 @@ def daily_summary(
     by default only days with a full 24 hours are returned. Pass
     ``complete_days_only=False`` to keep them.
     """
-    local = to_local(frame, site)
+    local = (
+        complete_local_days(frame, site)
+        if complete_days_only
+        else to_local(frame, site)
+    )
     aggregations = {
         "ALLSKY_SFC_SW_DWN": "sum",
         "ALLSKY_SFC_SW_DNI": "sum",
@@ -202,15 +231,10 @@ def daily_summary(
         "T2M": "mean",
         "WS2M": "mean",
         "RH2M": "mean",
-        "PRECTOTCORR": "sum",
+        "PRECTOTCORR": "mean",  # mm/day rate - see docstring; must NOT be summed
         "AOD_55": "mean",
     }
     present = {k: v for k, v in aggregations.items() if k in local.columns}
-    resampled = local.resample("D")
-    daily = resampled.agg(present)
-
-    if complete_days_only:
-        daily = daily.loc[resampled.size() == HOURS_PER_DAY]
-
+    daily = local.resample("D").agg(present)
     daily.index.name = "date_local"
     return daily

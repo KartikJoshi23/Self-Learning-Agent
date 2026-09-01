@@ -213,3 +213,34 @@ class TestLiveApi:
     def test_one_year_chunk_is_well_inside_the_cap(self):
         full = ",".join(power.DATA.power_parameters)
         assert self._raw(full, "20200101", "20201231").status_code == 200  # 9 x 1
+
+    def test_daily_rainfall_matches_the_power_daily_product(self, tmp_path):
+        """Hourly PRECTOTCORR is a mm/day rate, so it must be averaged.
+
+        POWER's own daily product is the ground truth. If daily_summary ever
+        goes back to summing, this diverges by a factor of 24.
+        """
+        response = power.requests.get(
+            "https://power.larc.nasa.gov/api/temporal/daily/point",
+            params={
+                "parameters": "PRECTOTCORR",
+                "community": "RE",
+                "latitude": MBR_SOLAR_PARK.latitude,
+                "longitude": MBR_SOLAR_PARK.longitude,
+                "start": "20200101",
+                "end": "20201231",
+                "format": "JSON",
+            },
+            timeout=power.REQUEST_TIMEOUT_S,
+        )
+        assert response.ok
+        reference = pd.Series(
+            response.json()["properties"]["parameter"]["PRECTOTCORR"]
+        ).replace(power.FILL_VALUE, float("nan"))
+
+        hourly = power.fetch_year(2020, cache_dir=tmp_path)
+        ours = power.daily_summary(hourly)["PRECTOTCORR"]
+
+        # Compared as annual totals; the UTC->local shift moves a few hours
+        # across day boundaries, so daily rows will not match exactly.
+        assert ours.sum() == pytest.approx(reference.sum(), rel=0.02)
