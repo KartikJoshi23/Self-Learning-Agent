@@ -14,10 +14,10 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | Tier 1 approved. **M0 (11/11), M1 (10/10), M2 (10/10), M3 (7/7) complete and verified. The M3 falsification gate PASSED.** M4 next — the last Tier 1 milestone. |
+| **Phase state** | **Tier 1 complete** (M0–M4). **Tier 2 approved; M5 complete.** M6 next. |
 | **Blocked on** | Nothing. |
-| **Next action** | **M4** — PPO agent (CleanRL single-file). **Acceptance: beat every baseline on held-out years 2023–2025, over ≥5 seeds with variance reported. The bar is `threshold-0.95` at $27,600/MWp/yr, CVaR@5% $27,362** — a condition-based policy, which is a harder target than fixed-interval alone. |
-| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval}`, **65 passing tests**, `scripts/` verify m0 (11/11), m1 (10/10), m2 (10/10), m3 (7/7). |
+| **Next action** | **M6** — stochastic, heterogeneous cleaning efficacy (DEWA's measured 69–99% across five robots) plus cleaning-robot health as a second latent state. **The sharp question:** does this create structure that filter-plus-threshold cannot express? If not, the honest conclusion is that this problem does not need deep RL. |
+| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **92 passing tests**, `scripts/` verify m0–m5. |
 
 ---
 
@@ -31,7 +31,8 @@ Master's explicit approval before the next phase begins.
 | 1 | Read + confirm methodology (`Problem-Solving-Skill.md`) | ✅ Complete | ✅ Yes — 2026-08-29 |
 | 2 | Deep research + agent concept proposal | ✅ Complete (audited, 8 corrections) | ✅ Yes — 2026-08-29 |
 | 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ✅ **Tier 1 approved** — 2026-08-29 |
-| 4 | Development — Tier 1 (M0–M4) | 🔵 In progress: M0 ✅ M1 ✅ M2 ✅ M3 ✅, M4 next | — |
+| 4 | Development — Tier 1 (M0–M4) | ✅ Complete | ✅ Approved 2026-08-29 |
+| 5 | Development — Tier 2 (M5–M7) | 🔵 In progress: M5 ✅, M6 next | ✅ Approved 2026-08-29 |
 
 ---
 
@@ -193,14 +194,81 @@ fixed-interval alone would have set**.
 
 ---
 
+### Phase 4 / M4 — PPO agent (complete, verified 2026-08-29)
+- `rimal/agents/ppo.py` — CleanRL-style single-file PPO with observation normalisation.
+- **Declared criterion PASSED:** PPO $27,627 ± 18 beats every fixed interval (+$127).
+- **But the headline is a NULL RESULT:** `tuned-threshold-0.93` scores **$27,651** —
+  PPO loses by $24, inside seed noise. In v0 soiling is observed exactly and cleaning is
+  a perfect reset, so the optimal policy *is* a threshold on an observed scalar.
+- **A near-miss worth recording:** the first run "passed" against `threshold-0.95`
+  ($27,600) from a hand-picked M3 grid that never tested 0.93. The true optimum was
+  worth ~$50/MWp/yr more — about twice PPO's apparent margin. Baselines are now tuned on
+  *training* years via `tune_threshold()`, the same protocol the agent gets.
+- Three bugs fixed to get PPO learning: a policy with no state-dependent rule at all
+  (constant P(clean)≈0.038, greedy = never-clean); a reward whose action-dependent part
+  ($2.50) was drowned by a constant ($80); and **missing observation normalisation** —
+  the actual cause, since soiling ratio arrives in [0.70, 1.00].
+
+### Phase 4 / M5 — Partial observability (complete, verified 2026-08-29)
+- `rimal/env/observation.py` — heteroscedastic noise model + Kalman filter;
+  `BeliefThreshold`, `ScheduleAwareThreshold`, `BeliefStateWrapper`.
+- **All three declared criteria PASSED. One self-imposed scrutiny check FAILED.**
+
+**M5 overturns the M4 null result.** The rule that beat PPO collapses once soiling is
+latent (held-out, USD/MWp/yr):
+
+| noise | naive thr | guarded | Kalman belief | blind fixed-31d |
+|---|---|---|---|---|
+| exact | 27,651 (8.3c) | — | — | 27,500 |
+| 0.03 | 27,148 (22.3c) | 27,240 | **27,638** (8.3c) | 27,500 |
+| 0.10 | 22,232 (109c) | 26,198 | **27,632** (8.3c) | 27,500 |
+
+The naive rule loses **$5,418 (19.6%)** by *chatter*, not neglect. **From 3% noise up, a
+blind fixed interval beats the sensor-driven rule.** The belief policy is nearly immune:
+$19 spread across 1–10% noise.
+
+**Belief RMSE 0.0262 → 0.00149 (17.6× reduction)** after fixing two filter bugs: it
+ignored the 14-day rain grace period (drift up to 0.033 — the same order as the noise it
+was removing), and it had an off-by-one on rain (env applies a day's rain to the
+*following* day).
+
+**PPO, 5 seeds:** belief-state $27,565 ± 30 vs memoryless $27,501 ± 43, **+$64, Welch
+t=2.71, p=0.030** — criterion (b) genuinely established. *(The first run reported this as
+a PASS on +$43 at n=3, p=0.194. The check now requires significance.)*
+
+**⚠️ The scrutiny check that failed:** neither learned agent beats the hand-built rule —
+PPO belief-state $27,565 vs `BeliefThreshold` $27,638 (−$74).
+
+---
+
+## Cross-milestone finding: state estimation, not control
+
+Three consecutive milestones now show a model-based rule beating model-free deep RL:
+M3 (tuned threshold > every fixed interval), M4 (tuned threshold > PPO), M5
+(Kalman+threshold > both PPO variants, and nearly immune to noise that destroys the
+naive rule). **The honest reading is that the hard part of this problem is state
+estimation, not control** — once soiling is known, the control law is a threshold, and
+the 17.6× RMSE reduction that carried M5 came from a Kalman filter, not a network.
+
+This sharpens M6/M7 into a real question rather than a formality: do stochastic cleaning
+efficacy and a degrading actuator create structure that filter-plus-threshold *cannot*
+express? If they do not, the defensible conclusion is that this problem does not need
+deep RL — which is itself a publishable result, and a more credible pitch than a
+manufactured win.
+
+---
+
 ## Next up
 
-- **M4** — PPO agent (CleanRL single-file), the final Tier 1 milestone.
-  **Acceptance (declared before build):** beats every baseline on **held-out years
-  2023–2025**, over **≥5 seeds with variance reported**. The bar is
-  **`threshold-0.95` at $27,600/MWp/yr, CVaR@5% $27,362**.
-- **On M4 completion:** Tier 1 is done — a working agent that beats fixed-interval and
-  condition-based cleaning on unseen years. Master decides whether to approve Tiers 2–3.
+- **M6** — stochastic, heterogeneous cleaning efficacy (DEWA's measured **69–99%** across
+  five robots) and cleaning-robot health as a **second latent state** (battery
+  overheating, corrosion, frame misalignment, UV degradation over their 13-month trial).
+  **Acceptance (declared before build):** the agent learns robot-specific dispatch
+  (verified by inspecting the policy, not just the return); performance degrades
+  gracefully as robot health falls; and an ablation shows the fixed-100%-efficacy
+  assumption costs measurable value.
+- **The sharp question M6 must answer:** does any of this create structure that
+  filter-plus-threshold cannot express?
 
 ---
 
@@ -212,7 +280,8 @@ fixed-interval alone would have set**.
 | 2 | ~~Repo needed.~~ Provided: https://github.com/KartikJoshi23/Self-Learning-Agent | Master session | ✅ Resolved 2026-08-29 |
 | 3 | ~~Public release?~~ | Master session | ✅ **Public, and staying public** — 2026-08-29 |
 | 4 | ~~Approve implementation plan?~~ | Master session | ✅ **Tier 1 approved** 2026-08-29 |
-| 6 | Approve Tiers 2-3 once Tier 1 lands? | Master session | ⏳ Deferred until M4 |
+| 6 | ~~Approve Tiers 2–3?~~ | Master session | ✅ **Tier 2 approved** 2026-08-29; Tier 3 still open |
+| 7 | Re-run `scripts/m4_verify.py` unattended for the archival record — the corrected run was stopped mid-seed-0 to free CPU for M5. PPO numbers are known and reproducible; only the recorded output and figure are missing. | Master session | ⏳ Open |
 | 5 | ~~Authorise the initial push?~~ | Master session | ✅ Authorised and pushed 2026-08-29 |
 
 ---
