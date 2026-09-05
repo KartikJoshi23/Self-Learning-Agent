@@ -94,25 +94,42 @@ def run_episode(env: RimalCleaningEnv, policy, year: int, *, seed: int = 0) -> E
     )
 
 
-def evaluate(env: RimalCleaningEnv, policy, years: tuple[int, ...]) -> pd.DataFrame:
-    """Run a policy across ``years`` and return one row per year."""
+def evaluate(
+    env: RimalCleaningEnv, policy, years: tuple[int, ...], *, seeds: int = 1
+) -> pd.DataFrame:
+    """Run a policy across ``years`` and return one row per episode.
+
+    ``seeds`` is the number of stochastic realisations per year, and it matters
+    whenever the environment is stochastic -- observation noise from M5, robot
+    efficacy from M6. With the default of 1 a three-year evaluation is three
+    episodes, which is too few to separate a policy difference from a single
+    lucky noise draw: the M5 noise sweep was first reported at ``seeds=1`` and
+    overstated the naive rule's collapse by about 13% relative (-$5,418 against
+    a properly sampled -$4,763). Deterministic configurations are unaffected,
+    so the default stays 1 and callers opt in where it counts.
+    """
+    if seeds < 1:
+        raise ValueError("seeds must be >= 1")
     rows = []
     for year in years:
-        result = run_episode(env, policy, year)
-        rows.append(
-            {
-                "policy": result.policy,
-                "year": result.year,
-                "net_usd": result.net_usd,
-                "revenue_usd": result.revenue_usd,
-                "cleaning_cost_usd": result.cleaning_cost_usd,
-                "energy_kwh": result.energy_kwh,
-                "soiling_loss_pct": result.soiling_loss_pct,
-                "cleans": result.cleans,
-                "mean_soiling_ratio": result.mean_soiling_ratio,
-                "min_soiling_ratio": result.min_soiling_ratio,
-            }
-        )
+        for seed in range(seeds):
+            result = run_episode(env, policy, year, seed=seed)
+            rows.append(
+                {
+                    "policy": result.policy,
+                    "year": result.year,
+                    "seed": seed,
+                    "net_usd": result.net_usd,
+                    "revenue_usd": result.revenue_usd,
+                    "cleaning_cost_usd": result.cleaning_cost_usd,
+                    "energy_kwh": result.energy_kwh,
+                    "soiling_loss_pct": result.soiling_loss_pct,
+                    "cleans": result.cleans,
+                    "mean_soiling_ratio": result.mean_soiling_ratio,
+                    "min_soiling_ratio": result.min_soiling_ratio,
+                    "water_used_m3": result.water_used_m3,
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -164,14 +181,16 @@ def summarise(frame: pd.DataFrame, alpha: float = 0.05) -> Summary:
         cvar_net_usd=cvar(net, alpha),
         mean_cleans=float(frame["cleans"].mean()),
         mean_soiling_loss_pct=float(frame["soiling_loss_pct"].mean()),
-        n_years=len(frame),
+        n_years=int(frame["year"].nunique()) if "year" in frame else len(frame),
         frame=frame,
     )
 
 
-def compare(env: RimalCleaningEnv, policies, years: tuple[int, ...]) -> pd.DataFrame:
-    """Evaluate several policies on the same years and rank by mean net value."""
-    summaries = [summarise(evaluate(env, policy, years)) for policy in policies]
+def compare(
+    env: RimalCleaningEnv, policies, years: tuple[int, ...], *, seeds: int = 1
+) -> pd.DataFrame:
+    """Evaluate several policies on the same episodes and rank by mean net value."""
+    summaries = [summarise(evaluate(env, policy, years, seeds=seeds)) for policy in policies]
     table = pd.DataFrame(
         [
             {
@@ -183,6 +202,7 @@ def compare(env: RimalCleaningEnv, policies, years: tuple[int, ...]) -> pd.DataF
                 "mean_cleans": s.mean_cleans,
                 "soiling_loss_pct": s.mean_soiling_loss_pct,
                 "n_years": s.n_years,
+                "n_episodes": len(s.frame),
             }
             for s in summaries
         ]

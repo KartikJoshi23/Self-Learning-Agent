@@ -30,7 +30,7 @@ This is a negative result for the deep-RL framing and a positive, actionable one
 | # | Hypothesis: adaptive control should win because… | Result |
 |---|---|---|
 | **M4** | soiling is dynamic, so a learned policy beats a fixed schedule | PPO beat every fixed interval (+$135) but **lost to a tuned threshold** by $16 |
-| **M5** | soiling is *latent*, so a threshold on a noisy reading must fail | Partial observability is **devastating** (−$5,418, 19.6%) — but a **Kalman filter fixes it**, and PPO still lost |
+| **M5** | soiling is *latent*, so a threshold on a noisy reading must fail | Partial observability is **devastating** (−$4,763, 17.2%) — but a **Kalman filter fixes it**, and PPO still lost |
 | **M6** | cleaning is stochastic and machines wear out | Real but small ($190/yr). Learning *which* robot to use **lost at every cleaning frequency** |
 | **M7** | storms make returns fat-tailed, which a scalar threshold cannot express | A genuine risk/return frontier exists — but QR-DQN **lost to a CVaR-tuned threshold** by $163 (3× seed sd), **and its own risk dial did nothing** |
 
@@ -43,13 +43,17 @@ Under a noisy performance-ratio signal — which is what a real plant actually m
 | observation noise | naive threshold | **Kalman belief** | blind fixed-31d |
 |---|---|---|---|
 | exact | 27,651 (8.3 cleans) | — | 27,500 |
-| 3% | 27,148 (22.3) | **27,638** (8.3) | 27,500 |
-| 10% | 22,232 (109!) | **27,632** (8.3) | 27,500 |
+| 1% | 27,617 (10.0) | **27,640** (8.4) | 27,500 |
+| 3% | 27,184 (21.6) | **27,630** (8.4) | 27,500 |
+| 6% | 25,096 (59.6) | **27,628** (8.3) | 27,500 |
+| 10% | 22,888 (97.7) | **27,629** (8.3) | 27,500 |
+
+*120 episodes per cell — 3 held-out years × 40 stochastic realisations.*
 
 Two things worth an operator's attention:
 
-1. **The failure mode is chatter, not neglect.** Cleaning frequency explodes from 8 to 109 per year as unlucky readings trigger unnecessary $60 washes.
-2. **Beyond 3% noise, a blind calendar beats the sensor-driven rule.** If your soiling estimate is noisy enough, *ignoring it entirely is better than trusting it*. Filtering removes that trap completely — the belief policy varies by $19 across a 1–10% noise range.
+1. **The failure mode is chatter, not neglect.** Cleaning frequency explodes from 8 to ~98 per year as unlucky readings trigger unnecessary $60 washes.
+2. **From 3% noise upward, a blind calendar beats the sensor-driven rule.** If your soiling estimate is noisy enough, *ignoring it entirely is better than trusting it*. Filtering removes that trap completely — the belief policy varies by **$11** across the whole 1–10% noise range.
 
 ---
 
@@ -72,7 +76,7 @@ Published values: **28 days** (commonly recommended, UAE) and **34 days** (repor
 
 ## Errors found in our own work
 
-Five defects were caught by measurement rather than review. Each changed a result; each is recorded in code at the site of the fix.
+Six defects were caught by measurement rather than review. Each changed a result; each is recorded in code at the site of the fix.
 
 **1. Rainfall was 24× too high.** NASA POWER's hourly `PRECTOTCORR` is a **mm/day rate**, not a per-hour depth, so summing it overcounted 24×. Dubai came out at 4,405 mm/yr against a real ~80–110. Rain is the natural-cleaning trigger, so this turned 4 washing days a year into 40 — and made a never-cleaned plant appear to lose only 2.8% of its energy instead of 17.6%. *Would have silently destroyed M3's falsification gate.*
 
@@ -83,6 +87,8 @@ Five defects were caught by measurement rather than review. Each changed a resul
 **4. An under-tuned baseline nearly produced a fake win.** M4's first run "passed" against `threshold-0.95`, from a hand-picked grid that never tested 0.93 — the true optimum, worth ~$50/MWp/yr more, about **twice the margin PPO appeared to win by**. Baselines are now tuned on training years under the same protocol the agent gets.
 
 **5. An unfair protocol nearly produced a second one.** M7's first result showed QR-DQN beating the rule by $166. The rule had been given **oracle threshold selection on its own test set**, the two were scored on **different year sets**, and the agent's CVaR came from **~1.5 tail samples**. Under a like-for-like protocol the rule wins by $163.
+
+**6. The headline sweep was computed from three episodes.** The evaluation harness defaulted to a single stochastic realisation per year, so the M5 noise sweep — the most-quoted result in this document — rested on three episodes per point. Resampled at 120 episodes per point, the naive rule's collapse is **−$4,763 (17.2%)** rather than −$5,418 (19.6%): the finding holds, the figure was overstated by about 13% relative. `evaluate()` now takes a `seeds` argument and records one row per episode. *Found by audit after publication; the figures above are the corrected ones.*
 
 **A methodological note.** Two checks in this project passed for the wrong reasons and had to be tightened. One compared means with no significance test (+$43 at p=0.194; later confirmed at n=5, p=0.030). The other selected the best risk level *after seeing the results* — with four risk levels, three seeds and a seed deviation around $50, the maximum of four noisy numbers beats the reference by chance. Replaced with a single pre-specified prediction, **that check now fails**, which is the honest verdict. Both are documented at the check site.
 

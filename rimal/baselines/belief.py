@@ -23,16 +23,14 @@ import numpy as np
 from rimal.baselines.policies import Policy
 from rimal.config import SOILING
 from rimal.env.cleaning_env import ACTION_CLEAN, ACTION_NOOP
-from rimal.env.observation import SoilingKalmanFilter
-
-#: Layout of the 9-dimensional noisy observation.
-OBS_REPORTED_RATIO = 0
-OBS_RAIN_SCALED = 7
-OBS_NOISE_SCALED = 8
-
-#: Undo the env's display scaling on those two slots.
-RAIN_SCALE = 10.0
-NOISE_SCALE = 0.2
+from rimal.env.observation import (
+    NOISE_SCALE,
+    OBS_NOISE_SCALED,
+    OBS_RAIN_SCALED,
+    OBS_REPORTED_RATIO,
+    RAIN_SCALE,
+    SoilingKalmanFilter,
+)
 
 
 @dataclass

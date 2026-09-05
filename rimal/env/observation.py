@@ -25,6 +25,39 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# --------------------------------------------------------------------------
+# Layout of the noisy observation vector.
+#
+# These describe what the ENVIRONMENT emits, so they live here rather than
+# alongside the policies that read them. They were originally defined in
+# rimal.baselines.belief, which made the env package import from the baselines
+# package: rimal.baselines -> belief -> policies -> rimal.env.cleaning_env ->
+# rimal/env/__init__ -> belief_wrapper -> rimal.baselines.belief. That cycle
+# only fails when rimal.baselines is imported before rimal.env, which is why
+# the test suite never hit it and scripts/m3_verify.py did.
+# --------------------------------------------------------------------------
+
+#: Index of the reported soiling ratio (the noisy performance-ratio estimate).
+OBS_REPORTED_RATIO = 0
+#: Index of the day's observed rainfall, scaled by RAIN_SCALE.
+OBS_RAIN_SCALED = 7
+#: Index of the day's observation-noise scale, scaled by NOISE_SCALE.
+OBS_NOISE_SCALED = 8
+
+#: Divisors the environment applies before emitting those two slots.
+RAIN_SCALE = 10.0
+NOISE_SCALE = 0.2
+
+#: Fleet features are appended after the nine base features: days-since-service,
+#: uses-since-service, then cooldown-remaining, one entry per robot.
+FLEET_OBS_START = 9
+
+
+def cooldown_slice(n_robots: int) -> slice:
+    """Slice selecting the per-robot cooldown entries of a fleet observation."""
+    start = FLEET_OBS_START + 2 * n_robots
+    return slice(start, start + n_robots)
+
 
 @dataclass(frozen=True)
 class ObservationNoise:

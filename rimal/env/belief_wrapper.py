@@ -24,16 +24,16 @@ from typing import Any
 import gymnasium as gym
 import numpy as np
 
-from rimal.baselines.belief import (
+from rimal.config import SOILING
+from rimal.env.cleaning_env import ACTION_CLEAN
+from rimal.env.observation import (
     NOISE_SCALE,
     OBS_NOISE_SCALED,
     OBS_RAIN_SCALED,
     OBS_REPORTED_RATIO,
     RAIN_SCALE,
+    SoilingKalmanFilter,
 )
-from rimal.config import SOILING
-from rimal.env.cleaning_env import ACTION_CLEAN
-from rimal.env.observation import SoilingKalmanFilter
 
 
 class BeliefStateWrapper(gym.ObservationWrapper):

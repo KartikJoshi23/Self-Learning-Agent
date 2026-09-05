@@ -30,28 +30,20 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from rimal.baselines.belief import (
+from rimal.baselines.policies import Policy
+from rimal.config import SOILING
+from rimal.env.observation import (
     NOISE_SCALE,
     OBS_NOISE_SCALED,
     OBS_RAIN_SCALED,
     OBS_REPORTED_RATIO,
     RAIN_SCALE,
+    SoilingKalmanFilter,
+    cooldown_slice,
 )
-from rimal.baselines.policies import Policy
-from rimal.config import SOILING
-from rimal.env.observation import SoilingKalmanFilter
 from rimal.env.robots import DEWA_FLEET, RobotSpec
 
 ACTION_NOOP = 0
-
-#: Fleet observation layout, appended after the 9 noisy base features:
-#: days-since-service, uses-since-service, then cooldown-remaining, one per robot.
-FLEET_OBS_START = 9
-
-
-def cooldown_slice(n_robots: int) -> slice:
-    start = FLEET_OBS_START + 2 * n_robots
-    return slice(start, start + n_robots)
 
 
 @dataclass

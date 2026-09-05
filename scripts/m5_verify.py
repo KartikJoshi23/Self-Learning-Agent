@@ -58,6 +58,10 @@ RESULTS: list[tuple[str, bool, str]] = []
 TRAIN_YEARS = DATA.train_years
 HOLDOUT_YEARS = DATA.holdout_years
 NOISE_LEVELS = (0.01, 0.03, 0.06, 0.10)
+#: Stochastic realisations per held-out year. The sweep was first reported at 1,
+#: which is three episodes per point and overstated the naive rule's collapse by
+#: about 13% relative. See rimal.eval.harness.evaluate.
+SWEEP_SEEDS = 40
 THRESHOLD = 0.93
 
 
@@ -132,7 +136,7 @@ def main() -> int:
             BeliefThreshold(THRESHOLD),
             FixedInterval(31),
         ):
-            frame = evaluate(env, policy, HOLDOUT_YEARS)
+            frame = evaluate(env, policy, HOLDOUT_YEARS, seeds=SWEEP_SEEDS)
             key = (
                 "naive"
                 if policy.name.startswith("threshold")
@@ -148,6 +152,7 @@ def main() -> int:
     sweep = pd.DataFrame(rows)
 
     exact_env = RimalCleaningEnv(EnvConfig(years=HOLDOUT_YEARS))
+    # Exact observability is deterministic, so one realisation is the truth.
     exact_net = evaluate(exact_env, SoilingThreshold(THRESHOLD), HOLDOUT_YEARS)[
         "net_usd"
     ].mean()
@@ -158,6 +163,7 @@ def main() -> int:
         .to_string(index=False, float_format=lambda v: f"{v:,.1f}")
     )
 
+    print(f"      ({len(HOLDOUT_YEARS) * SWEEP_SEEDS} episodes per cell)")
     worst = sweep.iloc[-1]
     check(
         "the naive threshold degrades badly as noise rises",
