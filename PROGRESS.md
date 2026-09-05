@@ -14,7 +14,7 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | **Tier 1 (M0–M4) and Tier 2 (M5–M7) complete.** Conclusion written to [FINDINGS.md](FINDINGS.md). **Awaiting Master's decision on what Tier 3 should be** — see below. |
+| **Phase state** | **Tier 1 (M0–M4) and Tier 2 (M5–M7) complete.** All acceptance scripts m0–m7 run and recorded. Conclusion in [FINDINGS.md](FINDINGS.md), published at https://claude.ai/code/artifact/6c6caf05-fc2b-4dcf-840f-d78089c025ee. **Awaiting Master's decision on Tier 3** — see below. |
 | **Blocked on** | Nothing. |
 | **Next action** | **Master decision.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery. |
 | **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **133 passing tests**, `scripts/` verify m0–m7, `FINDINGS.md`. |
@@ -329,6 +329,10 @@ right* — a policy that collapses 20% of the time is not deployable.
    budget — independently confirming audit finding E2.
 3. **QR-DQN loses to a CVaR-tuned threshold**, like for like: rule CVaR **$26,890** vs
    agent **$26,727** (−$163) at seed sd $54.
+4. **And the declared criterion fails too.** With the post-hoc α selection removed, CVaR
+   does **not** rise monotonically with risk aversion: $26,710 → $26,752 → $26,626 →
+   $26,641 as α falls 1.00 → 0.10. The ordering is noise. The distributional machinery
+   worked; the advantage never materialised. **M7 declared: FAILED. M7 scrutiny: FAILED.**
 
 **A check of ours that passed for the wrong reason.** The declared CVaR criterion picked
 the best risk level *after seeing the results*; with four αs, three seeds and sd ≈ $50,
@@ -380,7 +384,7 @@ assumed an agent worth deploying. It is not the right Tier 3 for the result we g
 | 3 | ~~Public release?~~ | Master session | ✅ **Public, and staying public** — 2026-08-29 |
 | 4 | ~~Approve implementation plan?~~ | Master session | ✅ **Tier 1 approved** 2026-08-29 |
 | 6 | ~~Approve Tiers 2–3?~~ | Master session | ✅ **Tier 2 approved** 2026-08-29; Tier 3 still open |
-| 7 | Re-run `scripts/m4_verify.py` unattended for the archival record — the corrected run was stopped mid-seed-0 to free CPU for M5. PPO numbers are known and reproducible; only the recorded output and figure are missing. | Master session | ⏳ Open |
+| 7 | ~~Re-run `scripts/m4_verify.py` for the archival record.~~ | Master session | ✅ Done 2026-09-05: **M4 PASSED 5/5**, PPO $27,635 ± 10 vs tuned threshold $27,651 (−$16). Same conclusion as before, tighter seeds. |
 | 5 | ~~Authorise the initial push?~~ | Master session | ✅ Authorised and pushed 2026-08-29 |
 
 ---

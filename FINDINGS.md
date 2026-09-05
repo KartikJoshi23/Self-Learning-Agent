@@ -29,10 +29,12 @@ This is a negative result for the deep-RL framing and a positive, actionable one
 
 | # | Hypothesis: adaptive control should win because… | Result |
 |---|---|---|
-| **M4** | soiling is dynamic, so a learned policy beats a fixed schedule | PPO beat every fixed interval (+$127) but **lost to a tuned threshold** by $24 |
+| **M4** | soiling is dynamic, so a learned policy beats a fixed schedule | PPO beat every fixed interval (+$135) but **lost to a tuned threshold** by $16 |
 | **M5** | soiling is *latent*, so a threshold on a noisy reading must fail | Partial observability is **devastating** (−$5,418, 19.6%) — but a **Kalman filter fixes it**, and PPO still lost |
 | **M6** | cleaning is stochastic and machines wear out | Real but small ($190/yr). Learning *which* robot to use **lost at every cleaning frequency** |
-| **M7** | storms make returns fat-tailed, which a scalar threshold cannot express | A genuine risk/return frontier exists — but QR-DQN **lost to a CVaR-tuned threshold** by $163 (3× seed sd) |
+| **M7** | storms make returns fat-tailed, which a scalar threshold cannot express | A genuine risk/return frontier exists — but QR-DQN **lost to a CVaR-tuned threshold** by $163 (3× seed sd), **and its own risk dial did nothing** |
+
+M7 deserves the sharpest statement, because it was the milestone with the best structural case for RL: a scalar threshold genuinely cannot represent "today's return distribution is skewed," while a distributional agent can. It didn't matter. QR-DQN's CVaR did **not** rise monotonically as risk aversion increased — $26,710 → $26,752 → $26,626 → $26,641 as α fell from 1.00 to 0.10. The ordering is noise. The machinery worked; the advantage never materialised.
 
 ### The one finding that transfers directly to an operator
 
@@ -82,7 +84,9 @@ Five defects were caught by measurement rather than review. Each changed a resul
 
 **5. An unfair protocol nearly produced a second one.** M7's first result showed QR-DQN beating the rule by $166. The rule had been given **oracle threshold selection on its own test set**, the two were scored on **different year sets**, and the agent's CVaR came from **~1.5 tail samples**. Under a like-for-like protocol the rule wins by $163.
 
-**A methodological note.** Two checks in this project passed for the wrong reasons and had to be tightened: one compared means with no significance test (+$43 at p=0.194, later confirmed at n=5, p=0.030), and one selected the best risk level *after seeing the results* — a garden of forking paths that the better-powered evaluation then contradicted. Both are documented at the check site.
+**A methodological note.** Two checks in this project passed for the wrong reasons and had to be tightened. One compared means with no significance test (+$43 at p=0.194; later confirmed at n=5, p=0.030). The other selected the best risk level *after seeing the results* — with four risk levels, three seeds and a seed deviation around $50, the maximum of four noisy numbers beats the reference by chance. Replaced with a single pre-specified prediction, **that check now fails**, which is the honest verdict. Both are documented at the check site.
+
+It is worth being blunt about what that means: **M7's declared criterion was recorded as passing, and on re-examination it does not hold.** The correction makes the project's conclusion stronger, not weaker, which is precisely why it was worth making.
 
 ---
 
