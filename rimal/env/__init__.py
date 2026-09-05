@@ -10,7 +10,7 @@ from rimal.env.cleaning_env import (
 )
 from rimal.env.energy_table import EnergyLookup, build_energy_table
 from rimal.env.belief_wrapper import BeliefStateWrapper
-from rimal.env.robots import DEWA_FLEET, Fleet, RobotSpec
+from rimal.env.robots import DEWA_FLEET, FLEET_WITH_WET_CREW, Fleet, RobotSpec
 from rimal.env.observation import ObservationNoise, SoilingKalmanFilter
 
 __all__ = [
@@ -28,4 +28,5 @@ __all__ = [
     "Fleet",
     "RobotSpec",
     "DEWA_FLEET",
+    "FLEET_WITH_WET_CREW",
 ]

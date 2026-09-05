@@ -49,8 +49,8 @@ from rimal.config import MBR_SOLAR_PARK, SOILING, Site
 from rimal.data import power
 from rimal.env.energy_table import EnergyLookup, build_energy_table
 from rimal.env.observation import ObservationNoise
-from rimal.env.robots import DEWA_FLEET, Fleet, RobotSpec
-from rimal.physics.soiling import AodModulatedSoiling, KimberSoiling
+from rimal.env.robots import DEWA_FLEET, FLEET_WITH_WET_CREW, Fleet, RobotSpec
+from rimal.physics.soiling import AodModulatedSoiling, KimberSoiling, storm_soiling
 
 ACTION_NOOP = 0
 ACTION_CLEAN = 1
@@ -89,7 +89,12 @@ class Economics:
 class EnvConfig:
     years: tuple[int, ...] = (2016, 2017, 2018, 2019, 2020, 2021, 2022)
     site: Site = MBR_SOLAR_PARK
-    soiling_model: str = "kimber"  # or "aod"
+    #: ``"kimber"`` constant rate; ``"aod"`` rate scales linearly with dust,
+    #: clipped to DEWA's average-rate band; ``"storm"`` rate scales
+    #: superlinearly with dust and is NOT clipped to that band, so dust storms
+    #: deposit storm-scale soiling. See ``rimal.physics.soiling.storm_soiling``
+    #: -- and note that "aod" clips away the very tail M7 studies.
+    soiling_model: str = "kimber"
     economics: Economics = field(default_factory=Economics)
     #: Nameplate capacity; the energy table is built for 1 MWp so costs and
     #: revenues are both per-MWp and the ratio is what matters.
@@ -147,6 +152,13 @@ class EnvConfig:
     fleet_specs: tuple[RobotSpec, ...] = DEWA_FLEET
     #: Cost of servicing one robot, USD per MWp. ASSUMPTION; swept in M6.
     service_cost_usd_per_mwp: float = 25.0
+    #: Annual water allowance, m3 per MWp. ``None`` disables the constraint.
+    #:
+    #: This is a CONSTRAINED MDP, not a penalty folded into the reward: the
+    #: budget is a hard allocation an operator is given, and the honest way to
+    #: report it is constraint-satisfaction rate alongside return, not a single
+    #: scalarised number that hides which was traded for which.
+    water_budget_m3_per_mwp: float | None = None
 
 
 class RimalCleaningEnv(gym.Env):
@@ -194,13 +206,13 @@ class RimalCleaningEnv(gym.Env):
             build_energy_table(start, end, site=self.config.site)
         )
 
-        self._model = (
-            KimberSoiling()
-            if self.config.soiling_model == "kimber"
-            else AodModulatedSoiling()
-        )
-        if self.config.soiling_model not in ("kimber", "aod"):
+        if self.config.soiling_model not in ("kimber", "aod", "storm"):
             raise ValueError(f"unknown soiling_model {self.config.soiling_model!r}")
+        self._model = {
+            "kimber": KimberSoiling,
+            "aod": AodModulatedSoiling,
+            "storm": storm_soiling,
+        }[self.config.soiling_model]()
         if self.config.reward_mode not in ("net_value", "negative_cost"):
             raise ValueError(f"unknown reward_mode {self.config.reward_mode!r}")
         if self.config.observability not in ("exact", "noisy"):
@@ -323,10 +335,19 @@ class RimalCleaningEnv(gym.Env):
                 # Dispatching a machine that is still cooling down does
                 # nothing. It is not punished beyond the lost day -- an
                 # operator would simply see the robot unavailable.
-                if self.fleet.available(candidate):
+                spec = self.config.fleet_specs[candidate]
+                over_budget = (
+                    self.config.water_budget_m3_per_mwp is not None
+                    and spec.water_m3_per_mwp > 0
+                    and self.fleet.water_used_m3 + spec.water_m3_per_mwp
+                    > self.config.water_budget_m3_per_mwp
+                )
+                if self.fleet.available(candidate) and not over_budget:
                     cleaned = True
                     robot_index = candidate
                 else:
+                    # Unavailable machine, or one whose water draw would break
+                    # the allocation. The day is simply lost.
                     cleaned = False
             else:
                 cleaned = False
@@ -384,6 +405,7 @@ class RimalCleaningEnv(gym.Env):
         }
         if self.fleet_mode:
             info["robot_health"] = self.fleet.health.copy()
+            info["water_used_m3"] = self.fleet.water_used_m3
 
         # Advance soiling into tomorrow, applying rain the same way the
         # standalone soiling models do so the two agree exactly.

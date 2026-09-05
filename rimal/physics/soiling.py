@@ -38,7 +38,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from rimal.config import SOILING
+from rimal.config import AOD_CLIMATOLOGY_550NM, SOILING
 
 
 def _accumulate(
@@ -123,13 +123,29 @@ class KimberSoiling:
 class AodModulatedSoiling:
     """Soiling whose daily rate scales with aerosol optical depth.
 
-    The daily deposition rate is ``mean_loss_rate * (AOD / AOD_reference)``,
-    clipped to ``rate_bounds``. With ``AOD_reference`` set to the series' own
-    mean, the long-run average rate reproduces ``mean_loss_rate`` while dusty
-    days soil faster and clear days slower.
+    The daily deposition rate is
+    ``mean_loss_rate * (AOD / AOD_reference) ** storm_exponent``, clipped to
+    ``rate_bounds``. With ``AOD_reference`` set to the series' own mean, the
+    long-run average reproduces ``mean_loss_rate`` while dusty days soil faster.
 
-    ``rate_bounds`` defaults to DEWA's measured band, so no individual day can
-    imply a rate outside what was actually observed at the site.
+    **On ``rate_bounds``, and a correction to M1.** This model originally
+    clipped the rate to DEWA's measured 0.14-0.33 %/day band, on the reasoning
+    that no day should imply a rate outside what was observed at the site. That
+    was wrong, and it mattered. DEWA's band describes *average* accumulation
+    over a 13-month trial, not a per-day ceiling, and the soiling literature is
+    explicit that a dust storm "can undo a cleaning cycle overnight" -- a
+    single-day deposition of order 7%, roughly thirty times the mean daily
+    rate. Clipping at 0.33 %/day pinned 18.7% of days at the cap and compressed
+    an 8x spread in measured AOD into a 1.5x spread in soiling. It removed
+    precisely the tail that risk-sensitive control exists to manage, and it
+    means every CVaR figure reported before M7 understates tail risk.
+
+    ``storm_exponent`` is an ASSUMPTION. Deposition flux rises with both
+    airborne concentration and settling velocity, and both increase during a
+    storm, so superlinear scaling is physically motivated; the specific value is
+    calibrated so the most extreme observed days reproduce the documented
+    overnight-cycle-loss effect. It is swept in ``scripts/m7_verify.py``.
+    Leaving it at 1.0 with the tight bounds reproduces the pre-M7 behaviour.
     """
 
     mean_loss_rate: float = SOILING.rate_mid_per_day
@@ -137,19 +153,26 @@ class AodModulatedSoiling:
         SOILING.rate_min_per_day,
         SOILING.rate_max_per_day,
     )
-    aod_reference: float | None = None
+    #: Fixed climatological reference. ``None`` falls back to the passed
+    #: frame's own mean, which makes the dynamics depend on the window and is
+    #: retained only for backwards compatibility -- see AOD_CLIMATOLOGY_550NM.
+    aod_reference: float | None = AOD_CLIMATOLOGY_550NM
     cleaning_threshold_mm: float = 6.0
     grace_period_days: int = 14
     max_soiling: float = 0.3
+    storm_exponent: float = 1.0
 
     def daily_rate(self, daily: pd.DataFrame) -> pd.Series:
         aod = daily["AOD_55"]
         reference = self.aod_reference if self.aod_reference is not None else aod.mean()
         if not np.isfinite(reference) or reference <= 0:
             raise ValueError(f"AOD reference must be positive and finite, got {reference}")
+        if self.storm_exponent <= 0:
+            raise ValueError("storm_exponent must be positive")
         low, high = self.rate_bounds
-        scaled = self.mean_loss_rate * (aod / reference)
+        scaled = self.mean_loss_rate * (aod / reference) ** self.storm_exponent
         return scaled.clip(lower=low, upper=high).rename("soiling_rate")
+
 
     def soiling_ratio(
         self, daily: pd.DataFrame, *, initial_soiling: float = 0.0
@@ -163,6 +186,30 @@ class AodModulatedSoiling:
             initial_soiling=initial_soiling,
         )
         return (1.0 - loss).rename("soiling_ratio")
+
+
+def storm_soiling(
+    mean_loss_rate: float = SOILING.rate_mid_per_day,
+    storm_exponent: float = 2.0,
+    max_daily_rate: float = 0.07,
+) -> AodModulatedSoiling:
+    """The tail-preserving configuration used from M7 onwards.
+
+    ``max_daily_rate`` of 7% is one cleaning cycle's worth of soiling
+    (30 days at ~0.235 %/day) deposited in a single day -- the literature's
+    "a storm can undo a cleaning cycle overnight", used as the physical ceiling
+    rather than DEWA's average-rate band.
+
+    The *mean* rate must still land inside DEWA's measured band, which
+    ``scripts/m1_verify.py`` checks; storms are rare enough (about 0.6% of days
+    exceed three times the median AOD) that they move the mean very little.
+    """
+    return AodModulatedSoiling(
+        mean_loss_rate=mean_loss_rate,
+        rate_bounds=(0.0, max_daily_rate),
+        storm_exponent=storm_exponent,
+        aod_reference=AOD_CLIMATOLOGY_550NM,
+    )
 
 
 def observed_accumulation_rate(soiling_ratio: pd.Series) -> pd.Series:

@@ -64,6 +64,20 @@ class CleaningCalibration:
     efficacy_max: float = 0.99
 
 
+#: Climatological mean AOD at 550 nm over the full 2016-2025 record at this
+#: site, used as a FIXED reference by the AOD-driven soiling models.
+#:
+#: It must be fixed rather than taken from whatever frame is passed. Using the
+#: frame's own mean makes the soiling rate for a given dust level depend on
+#: which years are in the window: the 2016-2022 training mean is 0.4158 and the
+#: 2023-2025 holdout mean is 0.4968, an 18.4% difference, which at a storm
+#: exponent of 2 scales the rate by 0.70x between the training and evaluation
+#: environments for identical dust. That is a train/eval mismatch invented by
+#: the code, not a property of the site, and it biases any agent-versus-rule
+#: comparison: an online filter re-estimates conditions as it goes, while a
+#: trained policy carries the training dynamics with it.
+AOD_CLIMATOLOGY_550NM: float = 0.4401
+
 #: Modules per MW, derived from DEWA's test-field module rating of 445-505 W.
 #: 1e6 W / 475 W ~= 2105 modules per MW.
 MODULES_PER_MW: int = 2105

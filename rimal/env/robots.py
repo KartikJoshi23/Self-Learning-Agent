@@ -74,6 +74,15 @@ class RobotSpec:
     #: unavailable. More aggressive cleaning draws more power, so cooldown is
     #: scaled with nominal efficacy.
     cooldown_days: int = 3
+    #: Cubic metres of water consumed per cleaning pass, per MWp.
+    #:
+    #: Zero for the dry robots DEWA is trialling. The wet crew is the reason
+    #: this field exists: the Phase 2 audit (RESEARCH.md E2) established that
+    #: wet washing uses roughly 8.5 m3/MWp/pass -- about 2,105 modules at DEWA's
+    #: 445-505 W rating and ~4 L each -- and that its *energy* content is
+    #: negligible (about 1% of the energy recovered). Water therefore belongs in
+    #: this model as a scarce-resource CONSTRAINT, not as a term in the reward.
+    water_m3_per_mwp: float = 0.0
 
 
 #: The five robots DEWA evaluated, spanning the measured 69-99% band.
@@ -85,6 +94,20 @@ DEWA_FLEET: tuple[RobotSpec, ...] = (
     RobotSpec("C-microfibre-tracker", 0.86, cooldown_days=5, wear_per_use=0.005),
     RobotSpec("D-bristle-tracker", 0.78, cooldown_days=3, wear_per_use=0.004),
     RobotSpec("E-microfibre-tracker", 0.69, cooldown_days=2, wear_per_use=0.003),
+)
+
+#: The dry fleet plus a wet crew. The crew cleans almost perfectly and is always
+#: available, but consumes water from a hard annual budget -- the trade the UAE
+#: Water Security Strategy 2036 actually poses at a desert solar plant.
+FLEET_WITH_WET_CREW: tuple[RobotSpec, ...] = DEWA_FLEET + (
+    RobotSpec(
+        "W-wet-crew",
+        0.98,
+        cooldown_days=0,
+        wear_per_use=0.0,
+        wear_per_day=0.0,
+        water_m3_per_mwp=8.5,
+    ),
 )
 
 
@@ -118,6 +141,7 @@ class Fleet:
         return len(self.specs)
 
     def reset(self) -> None:
+        self.water_used_m3 = 0.0
         self.health = np.ones(self.size, dtype=float)
         self.uses_since_service = np.zeros(self.size, dtype=float)
         self.days_since_service = np.zeros(self.size, dtype=float)
@@ -155,6 +179,7 @@ class Fleet:
         self.health[index] = max(0.0, self.health[index] - self.specs[index].wear_per_use)
         self.uses_since_service[index] += 1.0
         self.cooldown_remaining[index] = self.specs[index].cooldown_days
+        self.water_used_m3 += self.specs[index].water_m3_per_mwp
         return realised
 
     def service(self, index: int) -> float:

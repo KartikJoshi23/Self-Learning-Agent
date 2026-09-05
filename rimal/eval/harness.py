@@ -35,6 +35,10 @@ class EpisodeResult:
     mean_soiling_ratio: float
     min_soiling_ratio: float
     days: int
+    #: Water drawn over the episode, m3 per MWp. Zero unless a wet crew is in
+    #: the fleet; tracked separately from cost because the water budget is a
+    #: CONSTRAINT, not a price (see RESEARCH.md E2).
+    water_used_m3: float = 0.0
 
     @property
     def net_usd(self) -> float:
@@ -58,6 +62,7 @@ def run_episode(env: RimalCleaningEnv, policy, year: int, *, seed: int = 0) -> E
 
     energy = clean_energy = revenue = cost = 0.0
     cleans = days = 0
+    water = 0.0
     ratios: list[float] = []
 
     while True:
@@ -69,6 +74,7 @@ def run_episode(env: RimalCleaningEnv, policy, year: int, *, seed: int = 0) -> E
         cost += info["cleaning_cost_usd"]
         cleans += int(info["cleaned"])
         ratios.append(info["soiling_ratio"])
+        water = info.get("water_used_m3", water)
         days += 1
         if terminated or truncated:
             break
@@ -84,6 +90,7 @@ def run_episode(env: RimalCleaningEnv, policy, year: int, *, seed: int = 0) -> E
         mean_soiling_ratio=float(np.mean(ratios)),
         min_soiling_ratio=float(np.min(ratios)),
         days=days,
+        water_used_m3=float(water),
     )
 
 

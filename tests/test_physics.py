@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from pvlib import soiling as pvlib_soiling
 
-from rimal.config import SOILING
+from rimal.config import AOD_CLIMATOLOGY_550NM, SOILING
 from rimal.physics.soiling import (
     AodModulatedSoiling,
     KimberSoiling,
@@ -134,11 +134,30 @@ class TestKimber:
 
 
 class TestAodModulated:
-    def test_constant_aod_reproduces_the_mean_rate(self):
-        """With flat AOD the modulation is neutral, so it must equal Kimber."""
-        frame = _daily(50, aod=0.55)
+    def test_aod_at_the_climatological_reference_gives_the_mean_rate(self):
+        """The reference is a FIXED climatological constant, not the frame's own
+        mean. A window whose dust happens to sit at the climatological average
+        soils at the mean rate; a dustier window soils faster, which is the
+        point. Using the frame's mean instead made a year's dynamics depend on
+        which other years were loaded alongside it -- see AOD_CLIMATOLOGY_550NM.
+        """
         model = AodModulatedSoiling(mean_loss_rate=0.002)
-        assert model.daily_rate(frame).to_numpy() == pytest.approx(0.002)
+        at_reference = _daily(50, aod=AOD_CLIMATOLOGY_550NM)
+        assert model.daily_rate(at_reference).to_numpy() == pytest.approx(0.002)
+
+    def test_a_dustier_window_soils_faster_than_the_climatology(self):
+        # Bounds widened: the default clip at DEWA's 0.33 %/day would mask the
+        # scaling this test is about.
+        model = AodModulatedSoiling(mean_loss_rate=0.002, rate_bounds=(0.0, 1.0))
+        dusty = model.daily_rate(_daily(10, aod=2 * AOD_CLIMATOLOGY_550NM))
+        assert dusty.to_numpy() == pytest.approx(0.004)
+
+    def test_the_reference_does_not_depend_on_the_window(self):
+        """The same dust must imply the same rate however it is sliced."""
+        model = AodModulatedSoiling(mean_loss_rate=0.002)
+        short = model.daily_rate(_daily(10, aod=0.6))
+        long = model.daily_rate(_daily(400, aod=0.6))
+        assert short.iloc[0] == pytest.approx(long.iloc[0])
 
     def test_dusty_days_soil_faster_than_clean_days(self):
         frame = _daily(4)

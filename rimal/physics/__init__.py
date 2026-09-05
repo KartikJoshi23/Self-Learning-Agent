@@ -9,6 +9,7 @@ from rimal.physics.plant import (
 )
 from rimal.physics.soiling import (
     AodModulatedSoiling,
+    storm_soiling,
     KimberSoiling,
     observed_accumulation_rate,
 )
@@ -22,4 +23,5 @@ __all__ = [
     "KimberSoiling",
     "AodModulatedSoiling",
     "observed_accumulation_rate",
+    "storm_soiling",
 ]
