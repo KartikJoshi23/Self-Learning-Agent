@@ -53,7 +53,7 @@ from rimal.env import (  # noqa: E402
 from rimal.eval import evaluate  # noqa: E402
 
 FIGURE_DIR = Path(__file__).resolve().parents[1] / "figures"
-RESULTS: list[tuple[str, bool, str]] = []
+RESULTS: list[tuple[str, bool, str, bool]] = []
 
 TRAIN_YEARS = DATA.train_years
 HOLDOUT_YEARS = DATA.holdout_years
@@ -310,14 +310,26 @@ def main() -> int:
     fig.savefig(out, dpi=130)
     print(f"\n      figure written to {out.relative_to(Path.cwd())}")
 
-    failed = [n for n, ok, _ in RESULTS if not ok]
+    declared = [(n, ok) for n, ok, _, d in RESULTS if d]
+    scrutiny = [(n, ok) for n, ok, _, d in RESULTS if not d]
+    declared_failed = [n for n, ok in declared if not ok]
+    scrutiny_failed = [n for n, ok in scrutiny if not ok]
+
     print("\n" + "=" * 62)
-    if failed:
-        print(f"M5 FAILED -- {len(failed)} check(s): {', '.join(failed)}")
-        return 1
-    print(f"M5 PASSED -- {len(RESULTS)}/{len(RESULTS)} checks")
+    if declared_failed:
+        print(f"M5 declared criteria: FAILED -- {', '.join(declared_failed)}")
+    else:
+        print(f"M5 declared criteria: PASSED ({len(declared)}/{len(declared)})")
+    if scrutiny_failed:
+        print(f"M5 scrutiny checks:   FAILED -- {', '.join(scrutiny_failed)}")
+        print()
+        print("  No learned agent beats the hand-built Kalman+threshold rule.")
+        print("  Reported, not buried: on this problem the hard part is state")
+        print("  estimation, not control.")
+    elif scrutiny:
+        print(f"M5 scrutiny checks:   PASSED ({len(scrutiny)}/{len(scrutiny)})")
     print("=" * 62)
-    return 0
+    return 1 if (declared_failed or scrutiny_failed) else 0
 
 
 if __name__ == "__main__":
