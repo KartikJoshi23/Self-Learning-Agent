@@ -14,10 +14,10 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | **Tier 1 complete** (M0–M4). **Tier 2: M5 ✅, M6 ✅ complete.** M7 awaiting Master's decision — see the recommendation below. |
+| **Phase state** | **Tier 1 (M0–M4) and Tier 2 (M5–M7) complete.** Conclusion written to [FINDINGS.md](FINDINGS.md). **Awaiting Master's decision on what Tier 3 should be** — see below. |
 | **Blocked on** | Nothing. |
-| **Next action** | **Master decision required.** Four milestones now say the same thing (see *Cross-milestone finding*). Recommendation: run **M7 (CVaR under shamals)** — risk-sensitivity is the one axis a threshold rule genuinely cannot express — and if it also returns negative, **stop and write up** rather than continue adding machinery. |
-| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **110 passing tests**, `scripts/` verify m0–m6. |
+| **Next action** | **Master decision.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery. |
+| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **133 passing tests**, `scripts/` verify m0–m7, `FINDINGS.md`. |
 
 ---
 
@@ -32,7 +32,8 @@ Master's explicit approval before the next phase begins.
 | 2 | Deep research + agent concept proposal | ✅ Complete (audited, 8 corrections) | ✅ Yes — 2026-08-29 |
 | 3 | Full implementation plan | ✅ Delivered (`IMPLEMENTATION-PLAN.md`) | ✅ **Tier 1 approved** — 2026-08-29 |
 | 4 | Development — Tier 1 (M0–M4) | ✅ Complete | ✅ Approved 2026-08-29 |
-| 5 | Development — Tier 2 (M5–M7) | 🔵 M5 ✅ M6 ✅; **M7 held for a decision** | ✅ Approved 2026-08-29 |
+| 5 | Development — Tier 2 (M5–M7) | ✅ Complete: M5 ✅ M6 ✅ M7 ✅ | ✅ Approved 2026-08-29 |
+| 6 | Tier 3 — scope needs redefining, see below | ⬜ Not approved | ⏳ Master's call |
 
 ---
 
@@ -305,17 +306,68 @@ right* — a policy that collapses 20% of the time is not deployable.
 
 ---
 
+### Phase 4 / M7 — Risk sensitivity and the water constraint (complete, verified 2026-09-05)
+- `rimal/physics/soiling.storm_soiling` — superlinear, tail-preserving deposition.
+- Water CMDP: wet crew (8.5 m³/MWp/pass) + hard annual budget. 13 actions, 27-dim obs.
+- `rimal/agents/qrdqn.py` — QR-DQN with CVaR action selection. Tests 110 → 133.
+
+**Two defects in our own earlier work, both found before M7 could be measured:**
+1. **M1 clipped the soiling tail away.** DEWA's 0.14–0.33 %/day is an *average*, not a
+   per-day ceiling. The clip pinned 18.7% of days at the cap and compressed an 8× AOD
+   spread into 1.5× of soiling — **deleting the phenomenon M7 exists to study**, and
+   overstating CVaR across M3–M6 by **~$391/MWp/yr**.
+2. **A self-inflicted train/eval mismatch.** The model used the passed frame's own mean
+   AOD as reference, so identical dust implied a **0.70× different rate** in evaluation
+   than in training — structurally disadvantaging trained policies against online
+   filters. Now pinned to a fixed climatology, with a regression test.
+
+**Findings:**
+1. Storms create the **first genuine risk/return trade-off** in the project: mean-optimal
+   threshold 0.94 vs CVaR-optimal 0.96; +$58 CVaR costs −$55 mean. Under clipping both
+   optima sat at 0.94.
+2. Water constraint is cheap: **100% satisfaction, $43/MWp/yr (0.16%)** at the tightest
+   budget — independently confirming audit finding E2.
+3. **QR-DQN loses to a CVaR-tuned threshold**, like for like: rule CVaR **$26,890** vs
+   agent **$26,727** (−$163) at seed sd $54.
+
+**A check of ours that passed for the wrong reason.** The declared CVaR criterion picked
+the best risk level *after seeing the results*; with four αs, three seeds and sd ≈ $50,
+the max of four noisy numbers beats the reference by chance. The better-powered
+evaluation then put risk-neutral top. Replaced with a single pre-specified prediction
+(CVaR monotone in risk aversion), which the data does not support.
+
+---
+
+## FINAL CONCLUSION — see [FINDINGS.md](FINDINGS.md)
+
+Four hypotheses about where adaptive control adds value; **four negative results for deep
+RL** (M4, M5, M6, M7). No learned agent beat a well-tuned rule on any axis.
+
+**The hard part of PV cleaning is state estimation, not control.** Once soiling is known
+the control law is a threshold. The largest effect anything produced was M5's **17.6×
+reduction in soiling-estimate error** — from a Kalman filter.
+
+The operator-facing result is strong: under a realistic noisy performance-ratio signal a
+naive threshold collapses **19.6%** and cleans **109×/yr instead of 8**; beyond 3% noise
+a *blind calendar* beats the sensor-driven rule. Filtering removes that trap entirely.
+
+---
+
 ## Next up
 
-- **M6** — stochastic, heterogeneous cleaning efficacy (DEWA's measured **69–99%** across
-  five robots) and cleaning-robot health as a **second latent state** (battery
-  overheating, corrosion, frame misalignment, UV degradation over their 13-month trial).
-  **Acceptance (declared before build):** the agent learns robot-specific dispatch
-  (verified by inspecting the policy, not just the return); performance degrades
-  gracefully as robot health falls; and an ablation shows the fixed-100%-efficacy
-  assumption costs measurable value.
-- **The sharp question M6 must answer:** does any of this create structure that
-  filter-plus-threshold cannot express?
+Tier 3 as planned (M8 continual learning, M9 offline RL + OPE, M10 benchmark release)
+assumed an agent worth deploying. It is not the right Tier 3 for the result we got.
+
+**Recommended instead:**
+- Publish the Gymnasium environment as a benchmark — still the contribution it always
+  was, and *more* interesting with a negative result attached: it is a well-calibrated
+  problem on which deep RL does not beat a Kalman filter plus a threshold.
+- Write the result up for a venue (IEA-PVPS soiling community, or an energy-ML workshop).
+- **M9 (offline RL + OPE) remains worth doing on its own merits** — off-policy evaluation
+  is the credibility tool for any DEWA conversation, and it applies to the *rule* as much
+  as to an agent.
+- M8 (continual learning) is hard to justify now: nothing suggests the winning policy is
+  a train-once artefact that drifts.
 
 ---
 
