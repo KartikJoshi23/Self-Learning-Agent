@@ -17,7 +17,7 @@
 | **Phase state** | **Tier 1 (M0–M4) and Tier 2 (M5–M7) complete.** All acceptance scripts m0–m7 run and recorded. Conclusion in [FINDINGS.md](FINDINGS.md), published at https://claude.ai/code/artifact/6c6caf05-fc2b-4dcf-840f-d78089c025ee. **Awaiting Master's decision on Tier 3** — see below. |
 | **Blocked on** | Nothing. |
 | **Next action** | **Master decision.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery. |
-| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **133 passing tests**, `scripts/` verify m0–m7, `FINDINGS.md`. |
+| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **176 passing tests**, `scripts/` verify m0–m7, `FINDINGS.md`, `README.md`. |
 
 ---
 
@@ -239,6 +239,30 @@ a PASS on +$43 at n=3, p=0.194. The check now requires significance.)*
 
 **⚠️ The scrutiny check that failed:** neither learned agent beats the hand-built rule —
 PPO belief-state $27,565 vs `BeliefThreshold` $27,638 (−$74).
+
+---
+
+## Post-completion audit (2026-09-09)
+
+A deep audit of the whole solution after M7. **Five issues, three of them real defects
+that had already reached published output.**
+
+| # | Issue | Status |
+|---|---|---|
+| 1 | **Circular import.** `rimal/env/belief_wrapper.py` imported observation-layout constants from `rimal.baselines`, closing a cycle that broke `scripts/m3_verify.py` **for three milestones**. Only fails when baselines is imported before env — pytest's collection order masked it. | ✅ Layering fixed; `tests/test_imports.py` guards it structurally (AST, fresh interpreter) |
+| 2 | **The headline figure came from 3 episodes.** `evaluate()` defaulted to one stochastic realisation per year. Resampled at 120/point: collapse is **−$4,763 (17.2%)**, not −$5,418 (19.6%) — overstated ~13% relative. | ✅ `evaluate()`/`compare()` take `seeds`; M5 uses 40 |
+| 3 | **`m5_verify` crashed after every check** — `check()` grew a `declared` flag, the summary still unpacked 3 fields. Latent since the labelling was added, undetected because the script was never re-run. | ✅ Fixed; `tests/test_verify_scripts.py` guards arity for all 8 scripts |
+| 4 | M6's conclusions were single-realisation. Re-tested at 120 episodes, paired t-tests: efficacy-aware −104.0 ± 3.8 (**p < 0.0001**), partial-cleaning +27.8 ± 8.3 (**p = 0.0011**). | ✅ Both survive, now properly powered |
+| 5 | README was **seven milestones stale** — still said "M0 complete" on a public repo. | ✅ Rewritten |
+
+**The pattern worth recording:** every one of these was invisible to the test suite *by
+construction* — masked by collection order, hidden behind a default argument, or in prose
+nothing tested. Two of those categories are now permanently guarded. Twice an edit broke
+an *earlier* acceptance script and nothing noticed, because the script was never re-run;
+that is now a static check on every commit.
+
+Verified unchanged by the audit: **M0 11/11 · M1 10/10 · M2 10/10 · M3 7/7 · M5 8/8
+declared**, and the 17.6× belief-RMSE headline reproduces exactly. Tests 133 → **176**.
 
 ---
 
