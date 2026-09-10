@@ -1,0 +1,524 @@
+<title>Soiling Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:#F5F7F9; --surface:#FFFFFF; --surface-2:#EDF0F3; --surface-3:#E3E8ED;
+    --ink:#141A21; --ink-2:#4B5663; --ink-3:#7B8693;
+    --rule:#DDE2E8; --rule-strong:#C3CAD3;
+    --dust:#A9682F; --dust-soft:#C99A63; --dust-wash:#F2E7DA;
+    --filter:#1C6B64; --filter-wash:#DDECEA;
+    --fail:#97352F; --fail-wash:#F6E2E0;
+    --rain:#3B6EA5;
+    --font-display:"Newsreader",Georgia,serif;
+    --font-body:"IBM Plex Sans",system-ui,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  :root:not([data-theme="light"]) { @media (prefers-color-scheme: dark) {
+    --ground:#0F1319; --surface:#161C24; --surface-2:#1D242E; --surface-3:#252E39;
+    --ink:#E7ECF2; --ink-2:#A6B2BF; --ink-3:#77838F;
+    --rule:#262E39; --rule-strong:#38414E;
+    --dust:#D8975B; --dust-soft:#A87740; --dust-wash:#2B2117;
+    --filter:#4FB5A9; --filter-wash:#12292A;
+    --fail:#D67872; --fail-wash:#2C1918;
+    --rain:#6FA3D6;
+  } }
+  :root[data-theme="dark"] {
+    --ground:#0F1319; --surface:#161C24; --surface-2:#1D242E; --surface-3:#252E39;
+    --ink:#E7ECF2; --ink-2:#A6B2BF; --ink-3:#77838F;
+    --rule:#262E39; --rule-strong:#38414E;
+    --dust:#D8975B; --dust-soft:#A87740; --dust-wash:#2B2117;
+    --filter:#4FB5A9; --filter-wash:#12292A;
+    --fail:#D67872; --fail-wash:#2C1918;
+    --rain:#6FA3D6;
+  }
+
+  * { box-sizing:border-box; }
+  body { background:var(--ground); color:var(--ink); font-family:var(--font-body);
+         font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1240px; margin:0 auto; padding:clamp(1.5rem,3.5vw,2.5rem) clamp(1rem,3vw,2rem) 4rem; }
+
+  header { border-bottom:1px solid var(--rule); padding-bottom:1.5rem; margin-bottom:1.75rem; }
+  .eyebrow { font-family:var(--font-mono); font-size:.68rem; letter-spacing:.16em;
+             text-transform:uppercase; color:var(--ink-3); margin:0 0 .7rem; }
+  .eyebrow b { color:var(--dust); font-weight:500; }
+  h1 { font-family:var(--font-display); font-weight:500; font-size:clamp(1.9rem,4.2vw,2.7rem);
+       line-height:1.1; letter-spacing:-.02em; margin:0 0 .55rem; text-wrap:balance; }
+  .lede { color:var(--ink-2); max-width:70ch; margin:0; font-size:.97rem; }
+  .lede b { color:var(--ink); font-weight:600; }
+
+  /* ---------- controls ---------- */
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr));
+              gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:1.25rem; }
+  .ctl { background:var(--surface); padding:.85rem 1rem .95rem; }
+  .ctl > label { display:block; font-family:var(--font-mono); font-size:.63rem;
+                 letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); margin-bottom:.5rem; }
+  .ctl .val { font-family:var(--font-mono); color:var(--ink); font-weight:500; float:right; text-transform:none; letter-spacing:0; }
+  select, input[type=range] { width:100%; }
+  select { font-family:var(--font-body); font-size:.9rem; padding:.4rem .5rem;
+           background:var(--surface-2); color:var(--ink); border:1px solid var(--rule-strong);
+           border-radius:3px; }
+  input[type=range] { accent-color:var(--dust); height:1.4rem; cursor:pointer; }
+  select:focus-visible, input:focus-visible, button:focus-visible {
+    outline:2px solid var(--filter); outline-offset:2px; }
+
+  .transport { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  button { font-family:var(--font-body); font-size:.85rem; font-weight:500;
+           padding:.45rem .95rem; border:1px solid var(--rule-strong); border-radius:3px;
+           background:var(--surface-2); color:var(--ink); cursor:pointer; }
+  button:hover { background:var(--surface-3); }
+  button.primary { background:var(--filter); border-color:var(--filter); color:#fff; }
+  button.primary:hover { filter:brightness(1.08); }
+
+  /* ---------- stage ---------- */
+  .stage { display:grid; grid-template-columns:1fr 260px; gap:1.25rem; align-items:start; }
+  @media (max-width:900px){ .stage { grid-template-columns:1fr; } }
+  .panel { background:var(--surface); border:1px solid var(--rule); }
+  .panel-head { display:flex; justify-content:space-between; align-items:baseline;
+                padding:.7rem 1rem; border-bottom:1px solid var(--rule); }
+  .panel-head h2 { font-family:var(--font-body); font-size:.82rem; font-weight:600; margin:0; }
+  .panel-head .sub { font-family:var(--font-mono); font-size:.7rem; color:var(--ink-3); }
+  canvas { display:block; width:100%; height:auto; }
+
+  .legend { display:flex; flex-wrap:wrap; gap:.25rem 1.1rem; padding:.6rem 1rem .75rem;
+            font-family:var(--font-mono); font-size:.68rem; color:var(--ink-2);
+            border-top:1px solid var(--rule); }
+  .legend span { display:flex; align-items:center; gap:.4rem; }
+  .swatch { width:14px; height:3px; border-radius:2px; flex:none; }
+  .swatch.dot { width:7px; height:7px; border-radius:50%; }
+
+  /* ---------- live readout ---------- */
+  .tiles { display:grid; gap:1px; background:var(--rule); border:1px solid var(--rule); }
+  .tile { background:var(--surface); padding:.7rem .9rem; display:flex;
+          justify-content:space-between; align-items:baseline; gap:1rem; }
+  .tile .k { font-family:var(--font-mono); font-size:.66rem; letter-spacing:.08em;
+             text-transform:uppercase; color:var(--ink-3); }
+  .tile .v { font-family:var(--font-mono); font-size:1rem; font-weight:600;
+             font-variant-numeric:tabular-nums; }
+  .tile.lead { background:var(--filter-wash); }
+  .tile.lead .v { font-size:1.3rem; color:var(--filter); }
+  .tile.warn .v { color:var(--dust); }
+
+  /* ---------- comparison ---------- */
+  .cmp { margin-top:1.25rem; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; min-width:620px; font-size:.87rem; }
+  th,td { text-align:right; padding:.5rem .8rem; border-bottom:1px solid var(--rule); }
+  th:first-child, td:first-child { text-align:left; }
+  thead th { font-family:var(--font-mono); font-size:.65rem; letter-spacing:.08em;
+             text-transform:uppercase; color:var(--ink-3); font-weight:500;
+             border-bottom-color:var(--rule-strong); }
+  tbody td { font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  tbody td:first-child { font-family:var(--font-body); }
+  tbody tr.best td { background:var(--filter-wash); }
+  tbody tr.best td:first-child { font-weight:600; color:var(--filter); }
+  tbody tr.active td { box-shadow:inset 2px 0 0 var(--dust); }
+  tbody tr:last-child td { border-bottom:none; }
+  .bar { display:inline-block; height:7px; border-radius:2px; background:var(--dust); vertical-align:middle; }
+
+  .note { font-size:.85rem; color:var(--ink-2); margin:1rem 0 0; max-width:78ch; }
+  .note b { color:var(--ink); font-weight:600; }
+  footer { margin-top:2.5rem; padding-top:1.25rem; border-top:1px solid var(--rule);
+           font-size:.8rem; color:var(--ink-3); max-width:80ch; }
+  footer a { color:var(--filter); }
+  code { font-family:var(--font-mono); font-size:.9em; background:var(--surface-2);
+         padding:.1em .35em; border-radius:2px; }
+  @media (prefers-reduced-motion: reduce){ * { transition:none!important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">RIMAL · Mohammed bin Rashid Al Maktoum Solar Park · <b>held-out years, never trained on</b></p>
+    <h1>When should you clean a solar plant you cannot see?</h1>
+    <p class="lede">
+      A live simulation on <b>real measured Dubai data</b> — daily irradiance, dust and rainfall
+      from NASA POWER, with soiling calibrated to DEWA's own field trial. Every policy below
+      runs the same physics. Turn up the measurement noise and watch which ones survive.
+    </p>
+  </header>
+
+  <div class="controls">
+    <div class="ctl">
+      <label for="year">Year</label>
+      <select id="year"></select>
+    </div>
+    <div class="ctl">
+      <label for="policy">Policy on screen</label>
+      <select id="policy">
+        <option value="belief">Kalman belief threshold</option>
+        <option value="naive">Naive threshold (raw reading)</option>
+        <option value="fixed">Fixed 31-day calendar</option>
+        <option value="never">Never clean</option>
+      </select>
+    </div>
+    <div class="ctl">
+      <label for="noise">Sensor noise <span class="val" id="noiseVal">3%</span></label>
+      <input type="range" id="noise" min="0" max="12" step="1" value="3">
+    </div>
+    <div class="ctl">
+      <label for="thresh">Clean below <span class="val" id="threshVal">0.93</span></label>
+      <input type="range" id="thresh" min="86" max="99" step="1" value="93">
+    </div>
+    <div class="ctl">
+      <label>Playback</label>
+      <div class="transport">
+        <button id="play" class="primary">▶ Replay year</button>
+        <button id="reset">Show full year</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="panel">
+      <div class="panel-head">
+        <h2 id="chartTitle">Panel cleanliness through the year</h2>
+        <span class="sub" id="dayLabel">full year</span>
+      </div>
+      <canvas id="chart" width="1600" height="720"></canvas>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--dust)"></i>true soiling ratio</span>
+        <span><i class="swatch dot" style="background:var(--dust-soft)"></i>what the plant measures</span>
+        <span><i class="swatch" style="background:var(--filter)"></i>Kalman belief</span>
+        <span><i class="swatch" style="background:var(--ink-3);height:2px"></i>cleaning threshold</span>
+        <span><i class="swatch" style="background:var(--fail)"></i>cleaning dispatched</span>
+        <span><i class="swatch" style="background:var(--rain)"></i>rain wash</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="tiles">
+        <div class="tile lead"><span class="k">Net value</span><span class="v" id="tNet">—</span></div>
+        <div class="tile"><span class="k">Cleans</span><span class="v" id="tCleans">—</span></div>
+        <div class="tile warn"><span class="k">Soiling loss</span><span class="v" id="tLoss">—</span></div>
+        <div class="tile"><span class="k">Energy delivered</span><span class="v" id="tEnergy">—</span></div>
+        <div class="tile"><span class="k">Cleaning cost</span><span class="v" id="tCost">—</span></div>
+        <div class="tile"><span class="k">Rain washes</span><span class="v" id="tRain">—</span></div>
+      </div>
+      <p class="note" id="verdict"></p>
+    </div>
+  </div>
+
+  <div class="panel cmp">
+    <div class="panel-head">
+      <h2>All four policies, same year, same weather, same noise</h2>
+      <span class="sub" id="cmpSub"></span>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Policy</th><th>Net $/MWp/yr</th><th>Cleans</th><th>Soiling loss</th>
+              <th>Cost</th><th>vs best</th></tr>
+        </thead>
+        <tbody id="cmpBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="note" id="story"></p>
+
+  <footer>
+    <p>
+      Physics runs live in your browser: soiling accumulates from measured aerosol optical depth,
+      rain above 6&nbsp;mm washes the panel and leaves a 14-day damp grace period, and energy comes
+      from a <code>pvlib</code> chain fitted to within 0.003% of the full model. Soiling is
+      calibrated to DEWA's measured 0.14–0.33&nbsp;%/day; energy is valued at the MBR Solar Park
+      phase-5 PPA tariff of 1.6953&nbsp;US¢/kWh, cleaning at $60/MWp per pass.
+    </p>
+    <p>
+      Source, tests and the eight milestone acceptance scripts:
+      <a href="https://github.com/KartikJoshi23/Self-Learning-Agent">github.com/KartikJoshi23/Self-Learning-Agent</a>
+    </p>
+  </footer>
+</div>
+
+<script>
+const DATA = __DATA__;
+
+/* ---------------- physics, ported from rimal/ ---------------- */
+const PRICE = 0.016953, CLEAN_COST = 60.0;
+const RAIN_THRESHOLD = 6.0, GRACE = 14, MAX_SOILING = 0.30;
+const STORM_EXP = 2.0, MAX_RATE = 0.07;
+const M = DATA.meta;
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(rng){let u=0,v=0;while(!u)u=rng();while(!v)v=rng();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+const dailyRate = aod =>
+  Math.min(MAX_RATE, M.soiling_rate_mid * Math.pow(aod / M.aod_reference, STORM_EXP));
+
+// energy(ratio) = clean * ratio * (1 + k*(1-ratio)).
+// A soiled array clips less against the inverter and runs cooler, so it beats
+// linear scaling; k is fitted per DAY from the pvlib table because the effect
+// depends on that day's irradiance. p95 error against the full model: 0.056%.
+const energyAt = (clean, k, ratio) => clean * ratio * (1 + k*(1 - ratio));
+
+class Kalman {
+  constructor(){ this.q = 0.0008*0.0008; this.reset(); }
+  reset(){ this.loss = 0; this.v = 1e-6; this.grace = 0; }
+  resetEvent(grace){ this.loss = 0; this.v = 1e-8; this.grace = grace ? GRACE : 0; }
+  predict(rate){ if(this.grace>0){this.grace--; return;}
+    this.loss = Math.min(this.loss + rate, MAX_SOILING); this.v += this.q; }
+  update(obs, std){ const z = 1-obs, r = Math.max(std*std,1e-12);
+    const k = this.v/(this.v+r); this.loss = Math.max(0, this.loss + k*(z-this.loss));
+    this.v = (1-k)*this.v; }
+  get ratio(){ return 1 - this.loss; }
+}
+
+function simulate(year, policy, noiseStd, threshold, seed=0){
+  const y = DATA.years[String(year)], n = y.aod.length;
+  const rng = mulberry32(seed + year*7919);
+  const refClean = [...y.clean].sort((a,b)=>a-b)[Math.floor(n/2)];
+
+  let loss = 0, grace = 0, energy = 0, cleanEnergy = 0, cost = 0;
+  let cleans = 0, rainWashes = 0;
+  const kf = new Kalman();
+  let cleanedLast = false, rainLast = 0, sinceFixed = 0;
+
+  const tTrue=[], tObs=[], tBelief=[], cleanDays=[], rainDays=[];
+
+  for(let i=0;i<n;i++){
+    const ratio = 1 - loss;
+    // what the plant measures: heteroscedastic, worse on dim days
+    const scale = Math.min(4, Math.max(1, Math.sqrt(refClean / Math.max(y.clean[i],1e-9))));
+    const std = noiseStd * scale;
+    const obs = noiseStd>0
+      ? Math.min(1.3, Math.max(0.3, ratio*(1+gauss(rng)*std)))
+      : ratio;
+
+    // belief update (the filter reacts to YESTERDAY's rain, matching the env)
+    if(rainLast > RAIN_THRESHOLD) kf.resetEvent(true);
+    else if(cleanedLast) kf.resetEvent(false);
+    // The filter propagates a CONSTANT assumed rate -- DEWA's published
+    // mid-band -- exactly as rimal.baselines.belief does. Feeding it the true
+    // AOD-driven rate would hand it information a real operator does not have,
+    // and measurably flatters it.
+    else if(i>0) kf.predict(M.assumed_rate);
+    kf.update(obs, Math.max(std,1e-3));
+    rainLast = y.rain[i];
+
+    // decide
+    let clean = false;
+    if(policy==='never') clean = false;
+    else if(policy==='fixed'){ if(i>0 && ++sinceFixed>=31){ sinceFixed=0; clean=true; } }
+    else if(policy==='naive')  clean = obs < threshold;
+    else if(policy==='belief') clean = kf.ratio < threshold;
+
+    if(clean){ loss = 0; cleans++; cost += CLEAN_COST; cleanDays.push(i); }
+    cleanedLast = clean;
+
+    const nowRatio = 1 - loss;
+    energy += energyAt(y.clean[i], y.k[i], nowRatio);
+    cleanEnergy += y.clean[i];
+
+    tTrue.push(nowRatio); tObs.push(obs); tBelief.push(kf.ratio);
+
+    // tomorrow's soiling
+    if(y.rain[i] > RAIN_THRESHOLD){ loss = 0; grace = GRACE; rainDays.push(i); rainWashes++; }
+    else if(grace > 0) grace--;
+    else loss = Math.min(loss + dailyRate(y.aod[i]), MAX_SOILING);
+  }
+
+  const revenue = energy*PRICE;
+  return { n, tTrue, tObs, tBelief, cleanDays, rainDays, cleans, rainWashes,
+           energy, cleanEnergy, cost, revenue, net: revenue-cost,
+           lossPct: 100*(cleanEnergy-energy)/cleanEnergy };
+}
+
+/* ---------------- drawing ---------------- */
+const cv = document.getElementById('chart'), cx = cv.getContext('2d');
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const YMIN = 0.62, YMAX = 1.04;
+const PAD = {l:96, r:28, t:34, b:78};
+
+function draw(sim, upto, policy, threshold){
+  const W = cv.width, H = cv.height;
+  const iw = W-PAD.l-PAD.r, ih = H-PAD.t-PAD.b;
+  const X = i => PAD.l + (i/(sim.n-1))*iw;
+  const Y = v => PAD.t + (YMAX-v)/(YMAX-YMIN)*ih;
+
+  cx.clearRect(0,0,W,H);
+  cx.fillStyle = css('--surface'); cx.fillRect(0,0,W,H);
+
+  // gridlines + y labels
+  cx.font = '500 20px "IBM Plex Mono", monospace';
+  cx.textAlign='right'; cx.textBaseline='middle';
+  for(let v=0.70; v<=1.001; v+=0.05){
+    cx.strokeStyle = css('--rule'); cx.lineWidth = 1.5;
+    cx.beginPath(); cx.moveTo(PAD.l, Y(v)); cx.lineTo(W-PAD.r, Y(v)); cx.stroke();
+    cx.fillStyle = css('--ink-3'); cx.fillText(v.toFixed(2), PAD.l-14, Y(v));
+  }
+  cx.save(); cx.translate(26, PAD.t+ih/2); cx.rotate(-Math.PI/2);
+  cx.textAlign='center'; cx.fillStyle=css('--ink-3');
+  cx.font='500 21px "IBM Plex Mono", monospace';
+  cx.fillText('panel cleanliness  (1.00 = spotless)', 0, 0); cx.restore();
+
+  // month ticks
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  cx.textAlign='center'; cx.textBaseline='top'; cx.font='500 20px "IBM Plex Mono", monospace';
+  let acc=0; const dim=[31,sim.n===366?29:28,31,30,31,30,31,31,30,31,30,31];
+  for(let m=0;m<12;m++){ cx.fillStyle=css('--ink-3'); cx.fillText(months[m], X(acc+dim[m]/2), H-PAD.b+12); acc+=dim[m]; }
+
+  const lim = Math.max(1, upto);
+
+  // rain washes
+  sim.rainDays.filter(d=>d<lim).forEach(d=>{
+    cx.strokeStyle=css('--rain'); cx.lineWidth=3; cx.globalAlpha=.55;
+    cx.beginPath(); cx.moveTo(X(d), PAD.t); cx.lineTo(X(d), PAD.t+ih); cx.stroke(); cx.globalAlpha=1;
+  });
+
+  // noisy observations
+  if(policy!=='never'){
+    cx.fillStyle=css('--dust-soft'); cx.globalAlpha=.5;
+    for(let i=0;i<lim;i++){ const yy=Y(sim.tObs[i]);
+      if(yy>PAD.t-6 && yy<PAD.t+ih+6){ cx.beginPath(); cx.arc(X(i), yy, 3.2, 0, 6.283); cx.fill(); } }
+    cx.globalAlpha=1;
+  }
+
+  // threshold
+  if(policy==='naive'||policy==='belief'){
+    cx.strokeStyle=css('--ink-3'); cx.lineWidth=2.5; cx.setLineDash([9,7]);
+    cx.beginPath(); cx.moveTo(PAD.l, Y(threshold)); cx.lineTo(W-PAD.r, Y(threshold)); cx.stroke();
+    cx.setLineDash([]);
+  }
+
+  // belief
+  if(policy==='belief'){
+    cx.strokeStyle=css('--filter'); cx.lineWidth=4; cx.lineJoin='round'; cx.beginPath();
+    for(let i=0;i<lim;i++){ const yy=Y(sim.tBelief[i]); i?cx.lineTo(X(i),yy):cx.moveTo(X(i),yy); }
+    cx.stroke();
+  }
+
+  // true soiling
+  cx.strokeStyle=css('--dust'); cx.lineWidth=4.5; cx.lineJoin='round'; cx.beginPath();
+  for(let i=0;i<lim;i++){ const yy=Y(sim.tTrue[i]); i?cx.lineTo(X(i),yy):cx.moveTo(X(i),yy); }
+  cx.stroke();
+
+  // cleaning events
+  sim.cleanDays.filter(d=>d<lim).forEach(d=>{
+    cx.strokeStyle=css('--fail'); cx.lineWidth=2.5;
+    cx.beginPath(); cx.moveTo(X(d), PAD.t+ih+4); cx.lineTo(X(d), PAD.t+ih+26); cx.stroke();
+  });
+  cx.fillStyle=css('--ink-3'); cx.textAlign='left'; cx.textBaseline='top';
+  cx.font='500 19px "IBM Plex Mono", monospace';
+  cx.fillText('cleaning dispatched', PAD.l, PAD.t+ih+32);
+
+  // playhead
+  if(upto < sim.n){
+    cx.strokeStyle=css('--ink'); cx.lineWidth=2; cx.globalAlpha=.35;
+    cx.beginPath(); cx.moveTo(X(lim-1), PAD.t); cx.lineTo(X(lim-1), PAD.t+ih); cx.stroke(); cx.globalAlpha=1;
+  }
+}
+
+/* ---------------- wiring ---------------- */
+const $ = id => document.getElementById(id);
+const money = v => '$'+Math.round(v).toLocaleString();
+const POLICIES = [
+  {k:'belief', label:'Kalman belief threshold'},
+  {k:'naive',  label:'Naive threshold (raw reading)'},
+  {k:'fixed',  label:'Fixed 31-day calendar'},
+  {k:'never',  label:'Never clean'},
+];
+let timer = null, frame = 0, current = null;
+
+Object.keys(DATA.years).forEach(y=>{
+  const o=document.createElement('option'); o.value=y; o.textContent=y; $('year').appendChild(o); });
+
+const noiseOf = () => +$('noise').value/100;
+const threshOf = () => +$('thresh').value/100;
+
+function runAll(){
+  const year=+$('year').value, noise=noiseOf(), th=threshOf();
+  const runs = {};
+  POLICIES.forEach(p=> runs[p.k] = simulate(year, p.k, noise, th));
+  return runs;
+}
+
+function paintTiles(sim){
+  $('tNet').textContent    = money(sim.net);
+  $('tCleans').textContent = sim.cleans;
+  $('tLoss').textContent   = sim.lossPct.toFixed(2)+'%';
+  $('tEnergy').textContent = (sim.energy/1000).toFixed(0)+' MWh';
+  $('tCost').textContent   = money(sim.cost);
+  $('tRain').textContent   = sim.rainWashes;
+}
+
+function paintComparison(runs, activeKey){
+  const best = POLICIES.reduce((a,p)=> runs[p.k].net > runs[a].net ? p.k : a, POLICIES[0].k);
+  const bestNet = runs[best].net;
+  const worst = Math.min(...POLICIES.map(p=>runs[p.k].net));
+  const span = Math.max(1, bestNet-worst);
+  $('cmpBody').innerHTML = POLICIES.map(p=>{
+    const r = runs[p.k], gap = r.net-bestNet;
+    const w = 6 + 74*(r.net-worst)/span;
+    return `<tr class="${p.k===best?'best':''} ${p.k===activeKey?'active':''}">
+      <td>${p.label}</td><td>${money(r.net)}</td><td>${r.cleans}</td>
+      <td>${r.lossPct.toFixed(2)}%</td><td>${money(r.cost)}</td>
+      <td><i class="bar" style="width:${w}px;background:${p.k===best?'var(--filter)':'var(--dust)'}"></i>
+          <span style="color:var(--ink-3);font-size:.85em"> ${gap===0?'best':money(gap)}</span></td></tr>`;
+  }).join('');
+  $('cmpSub').textContent = `${$('year').value} · noise ${$('noise').value}% · threshold ${threshOf().toFixed(2)}`;
+  return {best, runs};
+}
+
+function narrate(runs, key){
+  const naive=runs.naive, belief=runs.belief, fixed=runs.fixed;
+  const noise=+$('noise').value;
+  let s;
+  if(noise===0){
+    s = `With a perfect sensor the naive threshold is fine — it and the filter agree almost exactly.
+         <b>Raise the noise slider</b> to see what a real plant faces.`;
+  } else if(naive.net < fixed.net){
+    s = `At <b>${noise}% sensor noise the naive rule has fallen behind a blind calendar</b> —
+         it cleans ${naive.cleans} times against the calendar's ${fixed.cleans}, chasing noise rather than dirt.
+         Filtering the same readings recovers ${money(belief.net-naive.net)} a year and cleans just ${belief.cleans} times.`;
+  } else {
+    s = `At ${noise}% noise the naive rule already cleans ${naive.cleans} times against the filter's
+         ${belief.cleans} — <b>${money(belief.net-naive.net)}/MWp/yr</b> of the difference is chatter,
+         not dirt. Keep raising the noise.`;
+  }
+  $('story').innerHTML = s;
+  const r = runs[key];
+  $('verdict').innerHTML = key==='never'
+    ? `Left alone, the panel loses <b>${r.lossPct.toFixed(1)}%</b> of its energy. Rain washes it
+       ${r.rainWashes} times a year, which is not enough.`
+    : `${POLICIES.find(p=>p.k===key).label}: <b>${r.cleans}</b> cleans, <b>${r.lossPct.toFixed(2)}%</b>
+       lost to dust.`;
+}
+
+function render(upto){
+  const key = $('policy').value;
+  const runs = runAll();
+  current = runs[key];
+  draw(current, upto===undefined?current.n:upto, key, threshOf());
+  paintTiles(current);
+  paintComparison(runs, key);
+  narrate(runs, key);
+  $('dayLabel').textContent = (upto===undefined||upto>=current.n)
+    ? `${current.n} days` : `day ${upto} of ${current.n}`;
+}
+
+function stop(){ if(timer){ clearInterval(timer); timer=null; $('play').textContent='▶ Replay year'; } }
+
+$('play').onclick = ()=>{
+  if(timer){ stop(); return; }
+  frame = 0; $('play').textContent='❚❚ Pause';
+  timer = setInterval(()=>{
+    frame += 3;
+    if(frame >= current.n){ render(); stop(); return; }
+    const key=$('policy').value;
+    draw(current, frame, key, threshOf());
+    $('dayLabel').textContent = `day ${frame} of ${current.n}`;
+  }, 28);
+};
+$('reset').onclick = ()=>{ stop(); render(); };
+['year','policy'].forEach(id=> $(id).onchange = ()=>{ stop(); render(); });
+$('noise').oninput = ()=>{ $('noiseVal').textContent = $('noise').value+'%'; stop(); render(); };
+$('thresh').oninput = ()=>{ $('threshVal').textContent = threshOf().toFixed(2); stop(); render(); };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>render());
+
+render();   // opens on a fully simulated year, not an empty shell
+</script>

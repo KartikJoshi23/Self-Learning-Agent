@@ -178,8 +178,21 @@ class TestDerived:
 class TestLiveApi:
     """Guards the two API constraints M0 established empirically."""
 
-    def test_single_year_succeeds(self, tmp_path):
-        frame = power.fetch_year(2020, cache_dir=tmp_path)
+    def test_single_year_request_returns_a_full_year(self):
+        """The API-shape invariant: one year of all nine parameters comes back
+        complete.
+
+        Deliberately checks the raw response rather than ``fetch_year``, which
+        also validates the *values*. Those are separate concerns, and conflating
+        them makes this test fail whenever an upstream parameter is faulty --
+        which says nothing about whether a one-year request fits the payload
+        cap. ``TestFillValues`` covers value quality.
+        """
+        response = self._raw(
+            ",".join(power.DATA.power_parameters), "20200101", "20201231"
+        )
+        assert response.status_code == 200
+        frame = power._parse_response(response.json())
         assert len(frame) == 8784  # 2020 was a leap year
         assert set(frame.columns) >= set(power.DATA.power_parameters)
 
@@ -237,10 +250,87 @@ class TestLiveApi:
         reference = pd.Series(
             response.json()["properties"]["parameter"]["PRECTOTCORR"]
         ).replace(power.FILL_VALUE, float("nan"))
+        assert reference.sum() > 0, "the daily product itself looks unusable"
 
-        hourly = power.fetch_year(2020, cache_dir=tmp_path)
-        ours = power.daily_summary(hourly)["PRECTOTCORR"]
+        # Checked against the project's cached data rather than a fresh fetch.
+        # The hourly endpoint has been observed serving this one parameter as
+        # roughly -99,000 while the daily product stayed correct, and a test
+        # that fails on an upstream fault teaches nothing. TestFillValues covers
+        # our handling of that fault directly.
+        ours = power.daily_summary(power.fetch_year(2020))["PRECTOTCORR"]
 
         # Compared as annual totals; the UTC->local shift moves a few hours
         # across day boundaries, so daily rows will not match exactly.
         assert ours.sum() == pytest.approx(reference.sum(), rel=0.02)
+
+
+class TestFillValues:
+    """Guarding a silent-corruption path.
+
+    Observed 2026-09-10: the hourly endpoint returned PRECTOTCORR around
+    -99,000 for every hour of 2020 while every other parameter was healthy and
+    the daily product was correct. That is not the documented -999 sentinel, so
+    it passed straight through the parser. Rainfall drives the natural-cleaning
+    resets, so a fresh clone would have run the whole soiling model with no rain
+    washes at all and produced quietly wrong results rather than an error.
+    """
+
+    @staticmethod
+    def _fill_payload(value: float, hours: int = 48) -> dict:
+        stamps = pd.date_range("2020-01-01", periods=hours, freq="h")
+        keys = [t.strftime("%Y%m%d%H") for t in stamps]
+        return {
+            "properties": {
+                "parameter": {
+                    "PRECTOTCORR": {k: value for k in keys},
+                    "ALLSKY_SFC_SW_DWN": {k: 500.0 for k in keys},
+                }
+            }
+        }
+
+    def test_documented_sentinel_is_rejected(self):
+        frame = power._parse_response(self._fill_payload(power.FILL_VALUE))
+        assert frame["PRECTOTCORR"].isna().all()
+
+    def test_undocumented_negative_fill_is_also_rejected(self):
+        """The actual failure: a large negative that is not -999."""
+        frame = power._parse_response(self._fill_payload(-99000.0))
+        assert frame["PRECTOTCORR"].isna().all()
+
+    def test_any_negative_rainfall_is_rejected(self):
+        frame = power._parse_response(self._fill_payload(-0.5))
+        assert frame["PRECTOTCORR"].isna().all()
+
+    def test_valid_rainfall_survives(self):
+        frame = power._parse_response(self._fill_payload(3.25))
+        assert (frame["PRECTOTCORR"] == 3.25).all()
+
+    def test_validate_raises_and_names_the_parameter(self):
+        frame = power._parse_response(self._fill_payload(-99000.0))
+        with pytest.raises(power.PowerFetchError, match="PRECTOTCORR"):
+            power._validate(frame, 2020)
+
+    def test_validate_accepts_a_healthy_frame(self):
+        power._validate(power._parse_response(self._fill_payload(1.0)), 2020)
+
+    def test_a_bad_fetch_is_never_cached(self, tmp_path, monkeypatch):
+        """A corrupt year must not reach disk, or it poisons every later
+        offline run."""
+        payload = self._fill_payload(-99000.0)
+
+        class Response:
+            ok = True
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return payload
+
+        monkeypatch.setattr(power.requests, "get", lambda *a, **k: Response())
+        with pytest.raises(power.PowerFetchError):
+            power.fetch_year(
+                2020,
+                parameters=("PRECTOTCORR", "ALLSKY_SFC_SW_DWN"),
+                cache_dir=tmp_path,
+            )
+        assert not list(tmp_path.glob("*.parquet")), "a bad fetch was cached"

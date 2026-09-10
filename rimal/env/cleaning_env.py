@@ -200,11 +200,23 @@ class RimalCleaningEnv(gym.Env):
             raise ValueError("config.years must not be empty")
 
         start, end = min(self.config.years), max(self.config.years)
-        hourly = power.fetch_years(start, end, self.config.site)
-        self._daily = power.daily_summary(hourly, self.config.site)
-        self._lookup = EnergyLookup(
-            build_energy_table(start, end, site=self.config.site)
-        )
+        # Fetch one year of lead-in. POWER serves UTC and Dubai is UTC+4, so the
+        # first local day of `start` is incomplete unless the previous year's
+        # final hours are present, and daily_summary correctly drops it. Without
+        # the lead-in an environment configured for 2023-2025 evaluates 2023 on
+        # 364 days while one configured for 2016-2025 uses 365 -- results would
+        # depend on which years happened to be requested. One extra cached year
+        # removes that.
+        lead_in = max(start - 1, 2001)
+        hourly = power.fetch_years(lead_in, end, self.config.site)
+        daily = power.daily_summary(hourly, self.config.site)
+        self._daily = daily[daily.index.year >= start]
+
+        # The energy table must be built over the SAME span and trimmed to the
+        # SAME dates: step() indexes it positionally by the row it took from
+        # _daily, so any misalignment silently reads another day's energy.
+        table = build_energy_table(lead_in, end, site=self.config.site)
+        self._lookup = EnergyLookup(table.loc[self._daily.index])
 
         if self.config.soiling_model not in ("kimber", "aod", "storm"):
             raise ValueError(f"unknown soiling_model {self.config.soiling_model!r}")

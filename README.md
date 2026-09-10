@@ -4,8 +4,16 @@
 
 A reinforcement-learning benchmark for **photovoltaic soiling and cleaning dispatch in desert conditions**, calibrated to Dubai's Mohammed bin Rashid Al Maktoum Solar Park.
 
-> **Status: complete.** Eight milestones, M0–M7. 143 tests.
-> **[Read the findings →](FINDINGS.md)**
+> **Status: complete.** Eight milestones, M0–M7. 183 tests.
+> **[▶ Run the live simulator](https://claude.ai/code/artifact/7911f3e9-7cc6-4dcc-af5d-c6d7b1a16c21)** · **[Read the findings →](FINDINGS.md)**
+
+### Try it in 30 seconds
+
+The simulator runs the real physics **live in your browser** on ten years of measured
+Dubai weather — no install, no server. Pick a policy, drag the sensor-noise slider, and
+watch a naive cleaning rule chatter itself into collapse while the Kalman filter holds
+flat. Its numbers reproduce the Python engine to **0.02% on energy** and match cleaning
+counts exactly (`web/simulator.html`, verified against `rimal/` in `node`).
 
 ---
 
@@ -71,6 +79,7 @@ Checks are labelled `declared` (approved in the plan) versus `scrutiny` (harder 
 | `rimal/agents` | PPO (CleanRL style) and QR-DQN with CVaR action selection |
 | `rimal/eval` | episode runner, CVaR, policy comparison, analytic optimum |
 | `scripts/` | one acceptance script per milestone |
+| `web/` | the browser simulator: `simulator.html` (self-contained), its template and exported data |
 
 The environment is a low-dimensional stochastic simulator — thousands of steps per second on CPU. **No GPU. Zero cost.** All data is free and redistributable: [NASA POWER](https://power.larc.nasa.gov/) supplies irradiance, weather *and* aerosol optical depth with no registration.
 

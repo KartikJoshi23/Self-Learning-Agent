@@ -36,8 +36,32 @@ logger = logging.getLogger(__name__)
 
 POWER_HOURLY_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
 
-#: NASA POWER's sentinel for a missing value.
+#: NASA POWER's documented sentinel for a missing value.
 FILL_VALUE = -999.0
+
+#: Physically impossible values, rejected regardless of the sentinel used.
+#:
+#: Relying on the documented -999 alone is not enough. Observed 2026-09-10: the
+#: hourly endpoint served PRECTOTCORR as roughly -99,000 for every hour of 2020
+#: while every other parameter was healthy and the daily product was correct.
+#: Nothing about that value is -999, so it passed straight through -- and since
+#: rainfall drives the natural-cleaning resets, a fresh clone would have run the
+#: whole soiling model with zero rain washes and produced quietly wrong results.
+#: Validate on physics, not on a magic number, and fail loudly.
+PHYSICAL_FLOOR: dict[str, float] = {
+    "ALLSKY_SFC_SW_DWN": 0.0,
+    "ALLSKY_SFC_SW_DNI": 0.0,
+    "ALLSKY_SFC_SW_DIFF": 0.0,
+    "CLRSKY_SFC_SW_DWN": 0.0,
+    "PRECTOTCORR": 0.0,
+    "AOD_55": 0.0,
+    "WS2M": 0.0,
+    "RH2M": 0.0,
+    "T2M": -90.0,
+}
+
+#: Refuse a parameter whose values are missing more often than this.
+MAX_MISSING_FRACTION = 0.05
 
 #: Default on-disk cache. Git-ignored; regenerate with fetch_years().
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
@@ -74,7 +98,31 @@ def _parse_response(payload: dict) -> pd.DataFrame:
     frame.index.name = "timestamp_utc"
     # NaN rather than pd.NA: these columns stay float64 so pvlib and numpy can
     # consume them directly without an object-dtype detour.
-    return frame.replace(FILL_VALUE, np.nan)
+    frame = frame.replace(FILL_VALUE, np.nan)
+
+    # Then reject anything physically impossible, whatever sentinel produced it.
+    for column, floor in PHYSICAL_FLOOR.items():
+        if column in frame.columns:
+            frame.loc[frame[column] < floor, column] = np.nan
+    return frame
+
+
+def _validate(frame: pd.DataFrame, year: int) -> None:
+    """Refuse a fetch that is too incomplete to use.
+
+    Failing here is the point: a silently wrong rainfall series is far worse
+    than a fetch that stops and says so.
+    """
+    missing = frame.isna().mean()
+    bad = missing[missing > MAX_MISSING_FRACTION]
+    if not bad.empty:
+        detail = ", ".join(f"{name} {share:.0%} missing" for name, share in bad.items())
+        raise PowerFetchError(
+            f"NASA POWER returned unusable data for {year}: {detail}. "
+            "Values outside physical bounds are treated as missing; this usually "
+            "means an upstream fault on those parameters rather than a bug here. "
+            "The cached parquet files, if present, are unaffected."
+        )
 
 
 def fetch_year(
@@ -122,6 +170,9 @@ def fetch_year(
     missing = sorted(set(parameters) - set(frame.columns))
     if missing:
         raise PowerFetchError(f"NASA POWER omitted requested parameters: {missing}")
+
+    # Validate BEFORE caching, so a bad fetch is never written to disk.
+    _validate(frame, year)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path)
