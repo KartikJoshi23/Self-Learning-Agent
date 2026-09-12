@@ -1,7 +1,7 @@
 "use client";
 
 import { useData, usd } from "@/lib/data";
-import { Note, PageShell, Panel, Stat, StatRow } from "@/components/ui";
+import { ACCENTS, Note, PageShell, Panel, Stat, StatRow } from "@/components/ui";
 
 export function Errors() {
   const { data: r } = useData("results");
@@ -55,6 +55,7 @@ export function Errors() {
 
   return (
     <PageShell
+      accent={ACCENTS.naive}
       eyebrow="06 · Errors we found in our own work"
       title="Seven defects that changed a result. Two near-misses. Two checks that passed for the wrong reason."
       lede={
@@ -74,7 +75,7 @@ export function Errors() {
       <Panel title="Defects, in the order they were found" subtitle="what was wrong · what it changed">
         <ol className="grid gap-2">
           {defects.map((d, i) => (
-            <li key={d.title} className="grid gap-2 rounded-xl bg-white/[0.03] p-4 md:grid-cols-[3rem_1fr_13rem] md:items-start">
+            <li key={d.title} className="glass-inset grid gap-2 p-4 md:grid-cols-[3rem_1fr_13rem] md:items-start">
               <p className="mono text-base text-sand">{String(i + 1).padStart(2, "0")}</p>
               <div>
                 <p className="text-sm text-ink">{d.title}</p>
@@ -89,7 +90,7 @@ export function Errors() {
       <Panel title="Near misses" subtitle="faults in the data source, caught by probing it rather than trusting the cache">
         <div className="grid gap-2 md:grid-cols-2">
           {nearMisses.map((m) => (
-            <div key={m.title} className="rounded-xl bg-white/[0.03] p-4">
+            <div key={m.title} className="glass-inset p-4">
               <p className="text-sm text-ink">{m.title}</p>
               <p className="mt-1 text-sm leading-relaxed text-ink-3">{m.body}</p>
             </div>
@@ -99,14 +100,14 @@ export function Errors() {
 
       <Panel title="Checks that passed for the wrong reason" subtitle="both were tightened; both now fail">
         <div className="grid gap-2 md:grid-cols-2">
-          <div className="rounded-xl bg-white/[0.03] p-4">
+          <div className="glass-inset p-4">
             <p className="text-sm text-ink">A mean compared with no significance test.</p>
             <p className="mt-1 text-sm leading-relaxed text-ink-3">
               M5&apos;s belief-state PPO first &quot;beat&quot; memoryless PPO by $43 at p = 0.19, then by $64 at p = 0.03 — and on the corrected
               environment by {r ? usd(r.m5.ppo_gap) : "$29"} at p = {r ? r.m5.ppo_p : "0.165"}. The criterion is recorded as failed.
             </p>
           </div>
-          <div className="rounded-xl bg-white/[0.03] p-4">
+          <div className="glass-inset p-4">
             <p className="text-sm text-ink">The best risk level chosen after seeing the results.</p>
             <p className="mt-1 text-sm leading-relaxed text-ink-3">
               With four risk levels, three seeds and a seed deviation around $50, the maximum of four noisy numbers beats the reference by

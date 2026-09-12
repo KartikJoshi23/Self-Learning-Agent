@@ -4,7 +4,7 @@ import { scaleLinear } from "d3-scale";
 import { line as d3line, curveMonotoneX } from "d3-shape";
 import { Frame, XAxis, YAxis } from "@/charts/base";
 import { useData, usd } from "@/lib/data";
-import { Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Stat, StatRow } from "@/components/ui";
+import { ACCENTS, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Stat, StatRow } from "@/components/ui";
 
 export function Verdict() {
   const { data: r } = useData("results");
@@ -40,6 +40,7 @@ export function Verdict() {
 
   return (
     <PageShell
+      accent={ACCENTS.sand}
       eyebrow="05 · The verdict"
       title="Deep RL did not beat a well-tuned rule on any of the four hypotheses."
       lede={
@@ -61,7 +62,7 @@ export function Verdict() {
         {r ? (
           <div className="grid gap-2">
             {rows.map((row) => (
-              <div key={row.m} className="grid gap-2 rounded-xl bg-white/[0.03] p-4 md:grid-cols-[3.5rem_1fr_1.4fr_11rem] md:items-center">
+              <div key={row.m} className="glass-inset grid gap-2 p-4 md:grid-cols-[3.5rem_1fr_1.4fr_11rem] md:items-center">
                 <p className="mono text-base text-sand">{row.m}</p>
                 <p className="text-sm text-ink-2">{row.hypothesis}</p>
                 <p className="text-sm text-ink">{row.result}</p>
@@ -102,6 +103,11 @@ export function Verdict() {
                 { key: "naive", label: "naive threshold", color: SERIES.naive },
               ];
               const pts = (k: (typeof series)[number]["key"]) => [{ noise: 0, v: r.m5.exact_net }, ...noise.map((p) => ({ noise: p.noise, v: p[k] }))];
+              // End labels: push apart any two that would sit within 13px of each other.
+              const ends = series.map((s) => ({ key: s.key, y: y(s.key === "fixed" ? noise[noise.length - 1].fixed : pts(s.key)[noise.length].v) }));
+              ends.sort((a, b) => a.y - b.y);
+              for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+              const labelY = Object.fromEntries(ends.map((e) => [e.key, e.y]));
               return (
                 <>
                   <YAxis scale={y} x0={0} x1={width} format={(v) => usd(v)} ticks={4} />
@@ -116,9 +122,9 @@ export function Verdict() {
                       <g key={s.key}>
                         <path d={path ?? ""} fill="none" stroke={s.color} strokeWidth={2} strokeDasharray={s.dash} />
                         {data.map((d) => (
-                          <circle key={d.noise} cx={x(d.noise)} cy={y(d.v)} r={3.5} fill={s.color} stroke="#16130e" strokeWidth={2} />
+                          <circle key={d.noise} cx={x(d.noise)} cy={y(d.v)} r={3.5} fill={s.color} stroke="#100e17" strokeWidth={2} />
                         ))}
-                        <text x={x(last.noise) + 8} y={y(last.v)} dy="0.32em" className="mono" fontSize={10} fill={SERIES.ink2}>
+                        <text x={x(last.noise) + 8} y={labelY[s.key]} dy="0.32em" className="mono" fontSize={10} fill={SERIES.ink2}>
                           {s.label}
                         </text>
                       </g>
@@ -151,7 +157,7 @@ export function Verdict() {
             ["Water is a constraint, not a cost.", `A hard annual budget cost ${r ? usd(r.m7.water_cost) : "$37"} per MWp per year at the tightest allocation, satisfied 100% of the time.`],
             ["Storms are where the remaining risk lives.", `Modelling them properly moves CVaR@5% by ${r ? usd(r.m7.clipping_overstated_cvar) : "$391"} and creates the only genuine risk/return trade-off found: ${r ? usd(r.m7.cvar_gain) : "$62"} of tail protection for ${r ? usd(r.m7.mean_cost) : "$55"} of mean.`],
           ].map(([title, body], i) => (
-            <li key={title} className="rounded-xl bg-white/[0.03] p-4">
+            <li key={title} className="glass-inset p-4">
               <p className="mono mb-2 text-xs text-sand">0{i + 1}</p>
               <p className="text-sm text-ink">{title}</p>
               <p className="mt-1 text-sm leading-relaxed text-ink-3">{body}</p>

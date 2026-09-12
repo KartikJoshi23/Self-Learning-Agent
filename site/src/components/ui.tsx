@@ -3,29 +3,35 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 import { PageNav } from "@/components/Nav";
+import { ACCENTS, accentStyle, useGlow, type Accent } from "@/lib/theme";
+
+export { ACCENTS, accentStyle, useGlow, type Accent };
 
 /*
   One template for every page: header (eyebrow · title · lede), then a column
-  of full-width panels and stat rows with one spacing scale. Nothing on a page
-  sits outside this shell, which is what keeps the pages uniform.
+  of full-width panels and stat rows with one spacing scale. Each page sets an
+  accent that every glass border, eyebrow dot, control and glow on that page
+  picks up through CSS variables.
 */
 
 export function PageShell({
   eyebrow,
   title,
   lede,
+  accent,
   children,
 }: {
   eyebrow: string;
   title: string;
   lede: ReactNode;
+  accent: Accent;
   children: ReactNode;
 }) {
   return (
-    <main className="mx-auto w-full max-w-6xl px-5 pb-16 pt-28 sm:px-8 sm:pt-32">
+    <main className="page mx-auto w-full max-w-6xl px-5 pb-16 pt-28 sm:px-8 sm:pt-32" style={accentStyle(accent)}>
       <header className="max-w-3xl">
-        <p className="eyebrow mb-4">{eyebrow}</p>
-        <h1 className="text-3xl font-medium leading-[1.08] tracking-[-0.02em] text-ink sm:text-4xl md:text-5xl">{title}</h1>
+        <p className="eyebrow mb-5">{eyebrow}</p>
+        <h1 className="gradient-text text-3xl font-medium leading-[1.08] tracking-[-0.02em] sm:text-4xl md:text-5xl">{title}</h1>
         <p className="mt-5 text-base leading-relaxed text-ink-2 sm:text-lg">{lede}</p>
       </header>
       <div className="mt-10 space-y-6 sm:mt-12 sm:space-y-8">{children}</div>
@@ -75,18 +81,19 @@ export function Panel({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const glow = useGlow();
   return (
     <Reveal>
-      <section className="glass p-5 sm:p-6">
+      <section className="glass glass-hover p-5 sm:p-6" onMouseMove={glow}>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
-            <h2 className="text-base font-medium text-ink">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p>}
+            <h2 className="text-base font-medium text-ink sm:text-lg">{title}</h2>
+            {subtitle && <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-3">{subtitle}</p>}
           </div>
           {controls && <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{controls}</div>}
         </div>
         {children}
-        {footer && <div className="mt-4 border-t border-white/5 pt-4 text-sm leading-relaxed text-ink-2">{footer}</div>}
+        {footer && <div className="mt-5 border-t border-white/10 pt-4 text-sm leading-relaxed text-ink-2">{footer}</div>}
       </section>
     </Reveal>
   );
@@ -112,21 +119,14 @@ export function Stat({
   value: string;
   unit?: string;
   note?: string;
-  tone?: "ink" | "belief" | "naive" | "agent" | "truth" | "calendar" | "sand";
+  tone?: keyof typeof ACCENTS;
 }) {
-  const color = {
-    ink: "text-ink",
-    belief: "text-belief",
-    naive: "text-naive",
-    agent: "text-agent",
-    truth: "text-truth",
-    calendar: "text-calendar",
-    sand: "text-sand",
-  }[tone];
+  const glow = useGlow();
+  const accent = ACCENTS[tone];
   return (
-    <div className="glass flex flex-col p-4 sm:p-5">
-      <p className="eyebrow mb-2">{label}</p>
-      <p className={`hero-figure text-2xl leading-none sm:text-3xl ${color}`}>
+    <div className="glass glass-hover flex flex-col p-4 sm:p-5" style={accentStyle(accent)} onMouseMove={glow}>
+      <p className="eyebrow mb-3">{label}</p>
+      <p className="hero-figure stat-figure text-2xl leading-none sm:text-3xl" style={{ color: tone === "ink" ? "var(--color-ink)" : accent.hex }}>
         {value}
         {unit && <span className="ml-1 text-sm text-ink-3">{unit}</span>}
       </p>
@@ -139,7 +139,9 @@ export function Stat({
 export function Note({ children }: { children: ReactNode }) {
   return (
     <Reveal>
-      <p className="max-w-3xl text-sm leading-relaxed text-ink-3">{children}</p>
+      <p className="max-w-3xl border-l-2 pl-5 text-sm leading-relaxed text-ink-3" style={{ borderColor: "rgba(var(--accent-rgb) / 0.5)" }}>
+        {children}
+      </p>
     </Reveal>
   );
 }
@@ -150,25 +152,16 @@ export function Chips<T extends string | number>({
   value,
   onChange,
   label,
-  tone = "sand",
 }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
   label: string;
-  tone?: "sand" | "agent";
 }) {
-  const on = tone === "sand" ? "bg-sand text-surface" : "bg-agent text-surface";
   return (
-    <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={label}>
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label}>
       {options.map((o) => (
-        <button
-          key={String(o.value)}
-          role="radio"
-          aria-checked={value === o.value}
-          onClick={() => onChange(o.value)}
-          className={`mono rounded-full px-2.5 py-1 text-xs transition ${value === o.value ? on : "bg-white/5 text-ink-2 hover:bg-white/10"}`}
-        >
+        <button key={String(o.value)} role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)} className="chip">
           {o.label}
         </button>
       ))}
@@ -197,7 +190,7 @@ export function Slider({
     <label className="mono flex items-center gap-2 text-xs text-ink-2">
       {label}
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label} />
-      <span className="w-10 text-ink">{format(value)}</span>
+      <span className="w-10 accent-text">{format(value)}</span>
     </label>
   );
 }
@@ -211,7 +204,7 @@ export function Key({ color, children, dash }: { color: string; children: ReactN
           <line x1="0" y1="3" x2="14" y2="3" stroke={color} strokeWidth="2" strokeDasharray="4 3" />
         </svg>
       ) : (
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: color }} aria-hidden />
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: color, boxShadow: `0 0 10px ${color}66` }} aria-hidden />
       )}
       {children}
     </span>
@@ -222,16 +215,21 @@ export function Legend({ children }: { children: ReactNode }) {
   return <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1">{children}</div>;
 }
 
+/** An inner tile inside a panel (rows, recommendations, near misses). */
+export function Tile({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`glass-inset p-4 ${className}`}>{children}</div>;
+}
+
 export const SERIES = {
-  belief: "#3987e5",
-  naive: "#d95926",
+  belief: "#4a94ec",
+  naive: "#e2633a",
   agent: "#9085e9",
   truth: "#c98500",
-  calendar: "#199e70",
-  ink: "#f2ebdf",
-  ink2: "#b8ad9c",
-  ink3: "#8a8072",
-  sand: "#e0a458",
+  calendar: "#22ad7c",
+  ink: "#f4eee4",
+  ink2: "#bcb3a6",
+  ink3: "#8d8578",
+  sand: "#e8ad5c",
 } as const;
 
 export const Skeleton = ({ height }: { height: number }) => <div className="animate-pulse rounded-xl bg-white/5" style={{ height }} />;

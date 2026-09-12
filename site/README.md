@@ -47,10 +47,27 @@ Vercel, framework Next.js, **root directory `site`**. The build is a pure static
 (`output: "export"`, `trailingSlash: true`): no server, no functions, nothing that costs money.
 Any static host serves `out/`.
 
+## Design system
+
+A desert at night, lit from below. `src/app/globals.css` holds the tokens:
+
+- **Colour field** — `.ambient`, a fixed layer of static radial gradients plus three slowly drifting
+  orbs (amber, blue, violet); every glass panel frosts it. The home hero paints the same field
+  inside the WebGL scene so its canvas can stay opaque.
+- **Glass** — `.glass`: gradient background, `backdrop-filter: blur(22px) saturate(1.35)`, a
+  gradient border drawn by a masked pseudo-element so it follows the radius, an inner top highlight
+  and an accent-tinted shadow. `.glass-hover` adds lift, a brighter border and a cursor-following
+  glow (`--mx/--my` written by `useGlow`).
+- **Accents** — each page sets `--accent` / `--accent-rgb` (`src/lib/theme.ts`): calibration ochre,
+  detection blue, learning violet, simulator aqua, verdict amber, errors orange, reproduce blue.
+  Eyebrow dots, borders, chips, sliders, buttons, notes and the nav pill all read it.
+- **Type** — Space Grotesk for display, IBM Plex Mono for numbers and controls; page titles are
+  gradient text ending in the page accent.
+
 ## Stack
 
 Next.js 16 · React 19 · Tailwind 4 · three.js via react-three-fiber (hero scene) · framer-motion
-(reveals and UI motion) · GSAP (registered for scroll sync) · Lenis (smooth scroll) · D3 scales and
-shapes (charts as React SVG). Chart colours were validated for CVD separation and contrast against
-the site's surface; colour follows the entity in every chart (belief = blue, naive = orange,
+(reveals) · GSAP (registered; drives Lenis) · Lenis (smooth scroll) · D3 scales and shapes (charts as
+React SVG). Chart series colours were validated for CVD separation and contrast against the site's
+surface (`#0a0910`); colour follows the entity in every chart (belief = blue, naive = orange,
 agent = violet, truth = ochre, calendar = aqua).

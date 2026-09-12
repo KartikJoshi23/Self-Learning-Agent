@@ -6,7 +6,7 @@ import { line as d3line, curveMonotoneX } from "d3-shape";
 import { interpolateLab } from "d3-interpolate";
 import { Frame, Tip, XAxis, YAxis } from "@/charts/base";
 import { useData, usd, fmt } from "@/lib/data";
-import { Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Slider, Stat, StatRow } from "@/components/ui";
+import { ACCENTS, Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Slider, Stat, StatRow } from "@/components/ui";
 
 /* ---------------------------------------------------------------------- */
 /* PPO: the decision surface, from untrained to trained                     */
@@ -53,7 +53,7 @@ function PpoPanel() {
     <Panel
       title="PPO · probability of cleaning, by state"
       subtitle={`soiling ratio × days since last clean · one seed, ${fmt(ppo.timesteps)} steps · other features at held-out medians, late April`}
-      controls={<Chips tone="agent" label="training stage" value={stage} onChange={setStage} options={ppo.stages.map((st, i) => ({ value: i, label: st.label }))} />}
+      controls={<Chips label="training stage" value={stage} onChange={setStage} options={ppo.stages.map((st, i) => ({ value: i, label: st.label }))} />}
       footer={
         <>
           Untrained, the policy cleans with a flat, state-independent probability. Trained, it has carved a cliff along the soiling axis at
@@ -88,7 +88,7 @@ function PpoPanel() {
                 )),
               )}
               <line x1={x(ppo.threshold)} x2={x(ppo.threshold)} y1={0} y2={height} stroke={SERIES.truth} strokeWidth={1.5} />
-              <text x={x(ppo.threshold) + 6} y={14} className="mono" fontSize={10} fill={SERIES.truth} style={{ paintOrder: "stroke", stroke: "#0f0d0a", strokeWidth: 4 }}>
+              <text x={x(ppo.threshold) + 6} y={14} className="mono" fontSize={10} fill={SERIES.truth} style={{ paintOrder: "stroke", stroke: "#0a0910", strokeWidth: 4 }}>
                 tuned threshold {ppo.threshold}
               </text>
               <YAxis scale={y} x0={0} x1={0} format={(v) => `${v} d`} ticks={4} />
@@ -270,7 +270,7 @@ function QrdqnPanel() {
       controls={
         <>
           <Slider label="day" value={d} min={0} max={q.days.length - 1} step={1} onChange={setDay} format={(v) => `${v + 1}`} />
-          <Chips tone="agent" label="risk level alpha" value={alpha} onChange={setAlpha} options={ALPHAS.map((a) => ({ value: a, label: `α ${a}` }))} />
+          <Chips label="risk level alpha" value={alpha} onChange={setAlpha} options={ALPHAS.map((a) => ({ value: a, label: `α ${a}` }))} />
         </>
       }
       footer={
@@ -302,7 +302,7 @@ function QrdqnPanel() {
                     <circle key={j} cx={x(taus[j])} cy={y(toUsd(v))} r={j < k ? 3.5 : 2} fill={color} opacity={j < k ? 1 : 0.4} />
                   ))}
                   <line x1={0} x2={x(taus[k - 1])} y1={y(cvar)} y2={y(cvar)} stroke={color} strokeWidth={1} opacity={0.8} />
-                  <text x={x(taus[Math.min(k - 1, taus.length - 1)]) + 6} y={y(cvar)} dy="0.32em" className="mono" fontSize={10} fill={color} style={{ paintOrder: "stroke", stroke: "#0f0d0a", strokeWidth: 4 }}>
+                  <text x={x(taus[Math.min(k - 1, taus.length - 1)]) + 6} y={y(cvar)} dy="0.32em" className="mono" fontSize={10} fill={color} style={{ paintOrder: "stroke", stroke: "#0a0910", strokeWidth: 4 }}>
                     {label} score {usd(cvar)}
                   </text>
                 </g>
@@ -365,6 +365,7 @@ export function Learnt() {
   const { data: results } = useData("results");
   return (
     <PageShell
+      accent={ACCENTS.agent}
       eyebrow="03 · What the agents learnt"
       title="Three agents, three learned artefacts. Each one is real, and each one lost."
       lede={

@@ -5,7 +5,7 @@ import { scaleLinear } from "d3-scale";
 import { area as d3area, line as d3line, curveMonotoneX } from "d3-shape";
 import { Frame, Tip, XAxis, YAxis } from "@/charts/base";
 import { useData } from "@/lib/data";
-import { Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Slider, Stat, StatRow } from "@/components/ui";
+import { ACCENTS, Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Slider, Stat, StatRow } from "@/components/ui";
 import { simulate } from "@/lib/physics/rimal";
 
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -28,6 +28,7 @@ export function Detects() {
 
   return (
     <PageShell
+      accent={ACCENTS.belief}
       eyebrow="02 · What the plant detects"
       title="The plant never sees soiling. It sees a noisy performance ratio."
       lede={
@@ -112,7 +113,7 @@ export function Detects() {
                   />
                   {hi !== null && (
                     <>
-                      <line x1={x(hi)} x2={x(hi)} y1={0} y2={height} stroke="#f2ebdf" opacity={0.25} />
+                      <line x1={x(hi)} x2={x(hi)} y1={0} y2={height} stroke="#f4eee4" opacity={0.25} />
                       <Tip x={x(hi)} y={y(r.tBelief[hi])} width={width}>
                         <div className="text-ink">day {hi + 1}</div>
                         <div>

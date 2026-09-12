@@ -3,28 +3,33 @@
 /*
   RIMAL — design tokens.
 
-  A single dark theme, by design: a desert at night. Chart series colours were
-  validated with the dataviz palette validator against this surface (adjacent
-  CVD ΔE ≥ 8.4, normal-vision ≥ 19.8, contrast ≥ 3:1) and follow entities, never
-  rank: belief is always blue, the naive rule always orange, a learned agent
-  always violet, the plant / truth always ochre, a blind calendar always aqua.
+  A desert at night, lit from below. The page is a colour field — amber dust
+  light, a blue belief, a violet agent — and every panel is glass that frosts
+  whatever is behind it. Each page carries its own accent (--accent), so the
+  site reads as one system with seven distinct rooms.
+
+  Chart series colours were validated with the dataviz palette validator
+  against the surface (adjacent CVD ΔE ≥ 8.4, normal-vision ≥ 19.8, contrast
+  ≥ 3:1) and follow entities, never rank: belief is always blue, the naive rule
+  always orange, a learned agent always violet, the plant / truth always ochre,
+  a blind calendar always aqua.
 */
 @theme {
-  --color-surface: #0f0d0a;
-  --color-surface-2: #16130e;
-  --color-surface-3: #1d1912;
-  --color-ink: #f2ebdf;
-  --color-ink-2: #b8ad9c;
-  --color-ink-3: #8a8072;
-  --color-sand: #e0a458;
-  --color-sand-2: #c2731a;
-  --color-dust: #8a5a2b;
+  --color-surface: #0a0910;
+  --color-surface-2: #100e17;
+  --color-surface-3: #17131f;
+  --color-ink: #f4eee4;
+  --color-ink-2: #bcb3a6;
+  --color-ink-3: #8d8578;
+  --color-sand: #e8ad5c;
+  --color-sand-2: #c9742a;
+  --color-dust: #9a6433;
 
-  --color-belief: #3987e5;
-  --color-naive: #d95926;
+  --color-belief: #4a94ec;
+  --color-naive: #e2633a;
   --color-agent: #9085e9;
   --color-truth: #c98500;
-  --color-calendar: #199e70;
+  --color-calendar: #22ad7c;
 
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -32,11 +37,13 @@
 
 :root {
   color-scheme: dark;
-  --glass-bg: rgba(255, 250, 240, 0.035);
-  --glass-bg-strong: rgba(255, 250, 240, 0.06);
-  --glass-border: rgba(255, 245, 225, 0.09);
-  --glass-highlight: rgba(255, 245, 225, 0.14);
-  --grid: rgba(242, 235, 223, 0.07);
+  --accent: #e8ad5c;
+  --accent-2: #4a94ec;
+  --accent-rgb: 232 173 92;
+  --grid: rgba(244, 238, 228, 0.07);
+  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025) 55%, rgba(255, 255, 255, 0.045));
+  --glass-border: linear-gradient(135deg, rgba(var(--accent-rgb) / 0.55), rgba(255, 255, 255, 0.12) 40%, rgba(255, 255, 255, 0.06) 70%, rgba(var(--accent-rgb) / 0.35));
+  --glass-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.9), 0 12px 40px -24px rgba(var(--accent-rgb) / 0.35);
 }
 
 html {
@@ -53,50 +60,268 @@ body {
   background: var(--color-surface);
   color: var(--color-ink);
   overflow-x: hidden;
+  position: relative;
 }
 
 ::selection {
-  background: rgba(224, 164, 88, 0.35);
+  background: rgba(232, 173, 92, 0.35);
 }
 
-/* Glass: frosted panels used where they mean something — a belief shown over
-   the raw signal it filters — and for controls. Fallback keeps contrast when
-   backdrop-filter is unavailable. */
+/* ------------------------------------------------------------------ */
+/* Ambient colour field: three slow orbs the glass frosts               */
+/* ------------------------------------------------------------------ */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* A static field first (always visible), then the drifting orbs on top. */
+  background:
+    radial-gradient(55% 40% at 8% 0%, rgba(232, 173, 92, 0.22) 0%, rgba(232, 173, 92, 0) 60%),
+    radial-gradient(50% 40% at 100% 25%, rgba(74, 148, 236, 0.2) 0%, rgba(74, 148, 236, 0) 60%),
+    radial-gradient(60% 45% at 40% 110%, rgba(144, 133, 233, 0.22) 0%, rgba(144, 133, 233, 0) 60%),
+    radial-gradient(70% 40% at 60% 100%, rgba(154, 100, 51, 0.28) 0%, rgba(154, 100, 51, 0) 65%),
+    linear-gradient(180deg, #0a0910 0%, #0d0b16 55%, #120d14 100%);
+}
+.ambient::before,
+.ambient::after,
+.ambient .orb {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  opacity: 0.9;
+  will-change: transform;
+}
+.ambient::before {
+  width: 55vw;
+  height: 55vw;
+  left: -15vw;
+  top: -20vw;
+  background: radial-gradient(circle, rgba(var(--accent-rgb) / 0.42) 0%, rgba(var(--accent-rgb) / 0.12) 35%, rgba(var(--accent-rgb) / 0) 70%);
+  animation: drift-a 26s ease-in-out infinite alternate;
+}
+.ambient::after {
+  width: 50vw;
+  height: 50vw;
+  right: -18vw;
+  top: 8vh;
+  background: radial-gradient(circle, rgba(74, 148, 236, 0.34) 0%, rgba(74, 148, 236, 0.1) 35%, rgba(74, 148, 236, 0) 70%);
+  animation: drift-b 32s ease-in-out infinite alternate;
+}
+.ambient .orb {
+  width: 48vw;
+  height: 48vw;
+  left: 28vw;
+  bottom: -26vw;
+  background: radial-gradient(circle, rgba(144, 133, 233, 0.36) 0%, rgba(144, 133, 233, 0.1) 35%, rgba(144, 133, 233, 0) 70%);
+  animation: drift-c 38s ease-in-out infinite alternate;
+}
+@keyframes drift-a {
+  to {
+    transform: translate(12vw, 10vh) scale(1.12);
+  }
+}
+@keyframes drift-b {
+  to {
+    transform: translate(-10vw, 18vh) scale(0.95);
+  }
+}
+@keyframes drift-c {
+  to {
+    transform: translate(-16vw, -12vh) scale(1.1);
+  }
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Glass                                                                */
+/* ------------------------------------------------------------------ */
 .glass {
+  position: relative;
+  isolation: isolate;
   background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  border-radius: 22px;
   box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 20px 60px -30px rgba(0, 0, 0, 0.8);
-  border-radius: 20px;
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    var(--glass-shadow);
+  --mx: 50%;
+  --my: 0%;
 }
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   .glass {
-    -webkit-backdrop-filter: blur(18px) saturate(1.2);
-    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(22px) saturate(1.35);
+    backdrop-filter: blur(22px) saturate(1.35);
   }
 }
-.glass-strong {
-  background: var(--glass-bg-strong);
+/* Gradient border: a masked pseudo-element so it follows the radius. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-border);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 0.35s ease;
+}
+/* Cursor-following glow, driven by --mx/--my from a tiny hook. */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(420px circle at var(--mx) var(--my), rgba(var(--accent-rgb) / 0.16), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.glass > * {
+  position: relative;
+  z-index: 2;
+}
+.glass-hover {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease;
+}
+.glass-hover:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 36px 90px -40px rgba(0, 0, 0, 0.95),
+    0 18px 50px -20px rgba(var(--accent-rgb) / 0.45);
+}
+.glass-hover:hover::after {
+  opacity: 1;
+}
+.glass-hover:hover::before {
+  opacity: 1;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb) / 0.9), rgba(255, 255, 255, 0.22) 45%, rgba(74, 148, 236, 0.55));
+}
+.glass-inset {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  transition:
+    border-color 0.3s ease,
+    background 0.3s ease,
+    transform 0.3s ease;
+}
+.glass-inset:hover {
+  border-color: rgba(var(--accent-rgb) / 0.45);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
 }
 
+/* ------------------------------------------------------------------ */
+/* Type & small pieces                                                  */
+/* ------------------------------------------------------------------ */
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-
 .hero-figure {
   font-family: var(--font-display);
-  font-variant-numeric: normal; /* per the marks spec: no tabular digits on a standalone figure */
+  font-variant-numeric: normal;
   letter-spacing: -0.03em;
 }
-
+.gradient-text {
+  background: linear-gradient(120deg, var(--color-ink) 0%, var(--color-ink) 45%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.accent-text {
+  color: var(--accent);
+}
 .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   font-family: var(--font-mono);
   font-size: 0.72rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--color-ink-3);
+}
+.eyebrow::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 12px 2px rgba(var(--accent-rgb) / 0.55);
+}
+.stat-figure {
+  text-shadow: 0 0 28px rgba(var(--accent-rgb) / 0.25);
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  color: #0a0910;
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 70%, white 30%));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 10px 26px -12px rgba(var(--accent-rgb) / 0.9);
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    filter 0.25s ease;
+}
+.btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
+    0 14px 34px -12px rgba(var(--accent-rgb) / 1);
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  color: var(--color-ink-2);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+.chip:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(var(--accent-rgb) / 0.5);
+  color: var(--color-ink);
+  transform: translateY(-1px);
+}
+.chip[aria-checked="true"],
+.chip[aria-pressed="true"],
+.chip[aria-current="page"] {
+  background: linear-gradient(135deg, rgba(var(--accent-rgb) / 0.95), rgba(var(--accent-rgb) / 0.75));
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #0a0910;
+  box-shadow: 0 8px 22px -10px rgba(var(--accent-rgb) / 0.9);
 }
 
 .grain::after {
@@ -105,7 +330,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 60;
-  opacity: 0.045;
+  opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   mix-blend-mode: soft-light;
 }
@@ -126,18 +351,7 @@ body {
 }
 
 input[type="range"] {
-  accent-color: var(--color-sand);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
+  accent-color: var(--accent);
 }
 
 /* Above-the-fold text animates in CSS so it paints before hydration. */
@@ -156,4 +370,15 @@ input[type="range"] {
 }
 .rise-2 {
   animation-delay: 0.1s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

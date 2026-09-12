@@ -39,10 +39,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
       <body className="grain">
+        <div className="ambient" aria-hidden>
+          <span className="orb" />
+        </div>
         <SmoothScroll>
           <Nav />
           {children}
-          <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-5 pb-10 text-xs text-ink-3 sm:px-8">
+          <footer className="page mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-5 pb-10 text-xs text-ink-3 sm:px-8">
             <p>RIMAL · calibrated to DEWA&apos;s published field measurements and ten years of NASA POWER data for Seih Al-Dahal · built and evaluated on one laptop, at zero cost.</p>
             <p>MIT licence.</p>
           </footer>

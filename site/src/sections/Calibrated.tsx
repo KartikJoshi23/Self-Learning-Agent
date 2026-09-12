@@ -6,7 +6,7 @@ import { line as d3line, curveMonotoneX } from "d3-shape";
 import { motion } from "framer-motion";
 import { Frame, Tip, XAxis, YAxis } from "@/charts/base";
 import { useData, usd, fmt } from "@/lib/data";
-import { Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Stat, StatRow } from "@/components/ui";
+import { ACCENTS, Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Stat, StatRow } from "@/components/ui";
 
 export function Calibrated() {
   const { data: gate } = useData("gate");
@@ -24,6 +24,7 @@ export function Calibrated() {
 
   return (
     <PageShell
+      accent={ACCENTS.truth}
       eyebrow="01 · Calibrated to DEWA"
       title="Before any agent was trained, the simulator had to reproduce the literature."
       lede={
@@ -82,8 +83,8 @@ export function Calibrated() {
                     </rect>
                   )}
                   <motion.path key={cost} d={path ?? ""} fill="none" stroke={SERIES.truth} strokeWidth={2} initial={{ pathLength: 0, opacity: 0.4 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.9, ease: "easeOut" }} />
-                  <circle cx={x(row.optimum)} cy={y(row.net)} r={5} fill={SERIES.truth} stroke="#0f0d0a" strokeWidth={2} />
-                  <text x={x(row.optimum)} y={y(row.net) - 12} textAnchor="middle" className="mono" fontSize={11} fill="#f2ebdf">
+                  <circle cx={x(row.optimum)} cy={y(row.net)} r={5} fill={SERIES.truth} stroke="#0a0910" strokeWidth={2} />
+                  <text x={x(row.optimum)} y={y(row.net) - 12} textAnchor="middle" className="mono" fontSize={11} fill="#f4eee4">
                     optimum {row.optimum} d
                   </text>
                   <line x1={x(row.analytic)} x2={x(row.analytic)} y1={0} y2={height} stroke={SERIES.ink3} strokeWidth={1} opacity={0.7} />
@@ -105,8 +106,8 @@ export function Calibrated() {
                   />
                   {hi !== null && (
                     <>
-                      <line x1={x(gate.intervals[hi])} x2={x(gate.intervals[hi])} y1={0} y2={height} stroke="#f2ebdf" opacity={0.25} />
-                      <circle cx={x(gate.intervals[hi])} cy={y(curve[hi])} r={4} fill="#0f0d0a" stroke={SERIES.truth} strokeWidth={2} />
+                      <line x1={x(gate.intervals[hi])} x2={x(gate.intervals[hi])} y1={0} y2={height} stroke="#f4eee4" opacity={0.25} />
+                      <circle cx={x(gate.intervals[hi])} cy={y(curve[hi])} r={4} fill="#0a0910" stroke={SERIES.truth} strokeWidth={2} />
                       <Tip x={x(gate.intervals[hi])} y={y(curve[hi])} width={width}>
                         <div className="text-ink">every {gate.intervals[hi]} days</div>
                         <div>{usd(curve[hi])} / MWp / yr</div>

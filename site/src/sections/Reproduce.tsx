@@ -1,7 +1,7 @@
 "use client";
 
 import { useData } from "@/lib/data";
-import { Note, PageShell, Panel, Stat, StatRow } from "@/components/ui";
+import { ACCENTS, Note, PageShell, Panel, Stat, StatRow } from "@/components/ui";
 
 const REPO = "https://github.com/KartikJoshi23/Self-Learning-Agent";
 
@@ -28,6 +28,7 @@ export function Reproduce() {
 
   return (
     <PageShell
+      accent={ACCENTS.belief}
       eyebrow="07 · Reproduce it"
       title="A clean clone reproduces the record from an empty cache."
       lede={
@@ -60,7 +61,7 @@ export function Reproduce() {
       <Panel title="Where things live" subtitle="the repository is public and stays public">
         <div className="flex flex-wrap gap-2">
           {links.map(([label, href]) => (
-            <a key={href} className="rounded-full bg-white/5 px-4 py-2 text-sm text-ink transition hover:bg-white/10" href={href} target="_blank" rel="noreferrer">
+            <a key={href} className="chip !px-4 !py-2 !text-sm !text-ink" href={href} target="_blank" rel="noreferrer">
               {label} ↗
             </a>
           ))}

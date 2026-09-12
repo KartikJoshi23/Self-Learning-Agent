@@ -1,22 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { scaleLinear } from "d3-scale";
 import { line as d3line, curveMonotoneX } from "d3-shape";
 import { Frame, XAxis, YAxis } from "@/charts/base";
 import { useData, usd } from "@/lib/data";
 import { simulate } from "@/lib/physics/rimal";
-import { Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Slider } from "@/components/ui";
+import { ACCENTS, Chips, Key, Legend, Note, PageShell, Panel, SERIES, Skeleton, Slider } from "@/components/ui";
 
 type PolicyId = "never" | "fixed" | "naive" | "guarded" | "belief" | "ppo";
 
-const POLICY_META: Record<PolicyId, { label: string; color: string; dash?: string; blurb: string }> = {
-  never: { label: "never clean", color: SERIES.ink3, blurb: "the do-nothing reference" },
-  fixed: { label: "fixed 31 d", color: SERIES.calendar, blurb: "a blind calendar — the M3 optimum" },
-  naive: { label: "naive threshold", color: SERIES.naive, blurb: "clean when the reading drops below the threshold" },
-  guarded: { label: "guarded threshold", color: SERIES.naive, dash: "5 4", blurb: "the naive rule, never twice in 7 days" },
-  belief: { label: "Kalman belief", color: SERIES.belief, blurb: "the threshold applied to the filtered belief" },
-  ppo: { label: "PPO (trained)", color: SERIES.agent, blurb: "the actual trained actor, run in your browser" },
+const POLICY_META: Record<PolicyId, { label: string; color: string; rgb: string; dash?: string; blurb: string }> = {
+  never: { label: "never clean", color: SERIES.ink3, rgb: "141 133 120", blurb: "the do-nothing reference" },
+  fixed: { label: "fixed 31 d", color: SERIES.calendar, rgb: "34 173 124", blurb: "a blind calendar — the M3 optimum" },
+  naive: { label: "naive threshold", color: SERIES.naive, rgb: "226 99 58", blurb: "clean when the reading drops below the threshold" },
+  guarded: { label: "guarded threshold", color: SERIES.naive, rgb: "226 99 58", dash: "5 4", blurb: "the naive rule, never twice in 7 days" },
+  belief: { label: "Kalman belief", color: SERIES.belief, rgb: "74 148 236", blurb: "the threshold applied to the filtered belief" },
+  ppo: { label: "PPO (trained)", color: SERIES.agent, rgb: "144 133 233", blurb: "the actual trained actor, run in your browser" },
 };
 const ORDER: PolicyId[] = ["never", "fixed", "naive", "guarded", "belief", "ppo"];
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -71,6 +71,7 @@ export function Simulate() {
 
   return (
     <PageShell
+      accent={ACCENTS.calendar}
       eyebrow="04 · How it uses what it learnt"
       title="Run the plant yourself. Same physics, same rules, the same trained policy."
       lede={
@@ -111,9 +112,8 @@ export function Simulate() {
                 aria-pressed={on}
                 disabled={disabled}
                 title={meta.blurb}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
-                  on ? "border-white/20 bg-white/10 text-ink" : "border-white/5 bg-white/[0.03] text-ink-2 hover:bg-white/5"
-                } ${disabled ? "opacity-40" : ""}`}
+                className={`chip flex items-center gap-2 ${disabled ? "opacity-40" : ""}`}
+                style={{ "--accent": meta.color, "--accent-rgb": meta.rgb } as CSSProperties}
               >
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: meta.color, opacity: on ? 1 : 0.5 }} />
                 {meta.label}
@@ -190,7 +190,7 @@ export function Simulate() {
                     setPlaying(true);
                   }
                 }}
-                className="mono shrink-0 whitespace-nowrap rounded-full bg-sand px-3 py-1 text-xs text-surface transition hover:brightness-110"
+                className="btn shrink-0 whitespace-nowrap"
               >
                 {playing ? "■ stop" : "▶ replay year"}
               </button>
@@ -241,7 +241,7 @@ function ArrayStrip({ soiling, washing }: { soiling: number; washing: boolean })
   const cells = 24;
   const t = Math.min(1, soiling / 0.3);
   return (
-    <div className="glass grid grid-cols-8 gap-1 p-2" role="img" aria-label={`array soiling ${(soiling * 100).toFixed(1)} percent`}>
+    <div className="glass-inset grid grid-cols-8 gap-1 p-2" role="img" aria-label={`array soiling ${(soiling * 100).toFixed(1)} percent`}>
       {Array.from({ length: cells }, (_, i) => {
         const jitter = ((i * 37) % 11) / 11;
         const film = t * (0.6 + 0.4 * jitter);

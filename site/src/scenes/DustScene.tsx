@@ -217,6 +217,41 @@ function SolarArray({ frame }: { frame: MutableRefObject<SceneFrame> }) {
   );
 }
 
+const BACKDROP_FRAG = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    // The site's colour field, painted inside the scene so the canvas can stay
+    // opaque: amber dust light top-left, a blue belief on the right.
+    vec3 base = vec3(0.039, 0.035, 0.063);
+    float a = smoothstep(0.75, 0.0, distance(vUv, vec2(0.08, 0.95)));
+    float b = smoothstep(0.7, 0.0, distance(vUv, vec2(1.02, 0.6)));
+    float c = smoothstep(0.9, 0.0, distance(vUv, vec2(0.55, -0.1)));
+    vec3 color = base
+      + vec3(0.91, 0.68, 0.36) * a * 0.22
+      + vec3(0.29, 0.58, 0.93) * b * 0.16
+      + vec3(0.60, 0.39, 0.20) * c * 0.20;
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+const BACKDROP_VERT = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+/** A far quad carrying the ambient colour field; unlit, unfogged. */
+function Backdrop() {
+  return (
+    <mesh position={[0, 6, -70]}>
+      <planeGeometry args={[260, 140]} />
+      <shaderMaterial vertexShader={BACKDROP_VERT} fragmentShader={BACKDROP_FRAG} fog={false} depthWrite={false} />
+    </mesh>
+  );
+}
+
 function Ground() {
   // A faint warm horizon so the array sits on something rather than in a void.
   return (
@@ -236,20 +271,21 @@ function Ground() {
 export function DustScene({
   frame,
   particles = 12000,
-  active = true,
   onContextLost,
 }: {
   frame: MutableRefObject<SceneFrame>;
   particles?: number;
-  active?: boolean;
   onContextLost?: () => void;
 }) {
+  // The loop always runs: switching R3F between "always" and "demand" left a
+  // transparent canvas blank after a pause. Browsers already throttle
+  // requestAnimationFrame for off-screen canvases, which is the saving wanted.
   return (
     <Canvas
       dpr={[1, 1.5]}
       camera={{ position: [0, 1.15, 5.2], fov: 50, near: 0.1, far: 80 }}
       gl={{ antialias: false, powerPreference: "high-performance", alpha: false }}
-      frameloop={active ? "always" : "demand"}
+      frameloop="always"
       style={{ position: "absolute", inset: 0 }}
       aria-hidden
       onCreated={({ gl }) => {
@@ -261,8 +297,9 @@ export function DustScene({
         });
       }}
     >
-      <color attach="background" args={["#0f0d0a"]} />
-      <fog attach="fog" args={["#0f0d0a", 6, 26]} />
+      <color attach="background" args={["#0a0910"]} />
+      <fog attach="fog" args={["#0a0910", 6, 26]} />
+      <Backdrop />
       <Ground />
       <SolarArray frame={frame} />
       <DustField frame={frame} count={particles} />
