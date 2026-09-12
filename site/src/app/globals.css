@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+/*
+  RIMAL — design tokens.
+
+  A single dark theme, by design: a desert at night. Chart series colours were
+  validated with the dataviz palette validator against this surface (adjacent
+  CVD ΔE ≥ 8.4, normal-vision ≥ 19.8, contrast ≥ 3:1) and follow entities, never
+  rank: belief is always blue, the naive rule always orange, a learned agent
+  always violet, the plant / truth always ochre, a blind calendar always aqua.
+*/
+@theme {
+  --color-surface: #0f0d0a;
+  --color-surface-2: #16130e;
+  --color-surface-3: #1d1912;
+  --color-ink: #f2ebdf;
+  --color-ink-2: #b8ad9c;
+  --color-ink-3: #8a8072;
+  --color-sand: #e0a458;
+  --color-sand-2: #c2731a;
+  --color-dust: #8a5a2b;
+
+  --color-belief: #3987e5;
+  --color-naive: #d95926;
+  --color-agent: #9085e9;
+  --color-truth: #c98500;
+  --color-calendar: #199e70;
+
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+  --glass-bg: rgba(255, 250, 240, 0.035);
+  --glass-bg-strong: rgba(255, 250, 240, 0.06);
+  --glass-border: rgba(255, 245, 225, 0.09);
+  --glass-highlight: rgba(255, 245, 225, 0.14);
+  --grid: rgba(242, 235, 223, 0.07);
+}
+
+html {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: auto; /* Lenis drives scrolling; the browser must not fight it */
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(224, 164, 88, 0.35);
+}
+
+/* Glass: frosted panels used where they mean something — a belief shown over
+   the raw signal it filters — and for controls. Fallback keeps contrast when
+   backdrop-filter is unavailable. */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 20px 60px -30px rgba(0, 0, 0, 0.8);
+  border-radius: 20px;
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass {
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    backdrop-filter: blur(18px) saturate(1.2);
+  }
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-figure {
+  font-family: var(--font-display);
+  font-variant-numeric: normal; /* per the marks spec: no tabular digits on a standalone figure */
+  letter-spacing: -0.03em;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+.grain::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+/* Recessive chart chrome */
+.axis text {
+  fill: var(--color-ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.axis line,
+.axis path {
+  stroke: var(--grid);
+}
+.gridline {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+input[type="range"] {
+  accent-color: var(--color-sand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Above-the-fold text animates in CSS so it paints before hydration. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rise-2 {
+  animation-delay: 0.1s;
+}

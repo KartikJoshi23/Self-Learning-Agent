@@ -14,10 +14,10 @@
 | Field | Value |
 |---|---|
 | **Current phase** | **Phase 4 — Development, post-completion.** Tiers 1 and 2 (M0–M7) complete; Tier 3 not yet scoped. |
-| **Phase state** | **Master review of the collaborator's M6–M7 / audit / simulator work completed 2026-09-12.** Two data-layer faults found and fixed (an upstream rainfall units change, a corrupted lead-in year), every acceptance script re-run on the corrected environment, and the published numbers re-baselined from those runs — logs in `results/`. Conclusion in [FINDINGS.md](FINDINGS.md). **Awaiting Master's decision on Tier 3** — see below. |
+| **Phase state** | **Live site built 2026-09-12** (`site/`, Next.js static export, eight pages) and awaiting the Master's Vercel import. **Master review of the collaborator's M6–M7 / audit / simulator work completed 2026-09-12.** Two data-layer faults found and fixed (an upstream rainfall units change, a corrupted lead-in year), every acceptance script re-run on the corrected environment, and the published numbers re-baselined from those runs — logs in `results/`. Conclusion in [FINDINGS.md](FINDINGS.md). **Awaiting Master's decision on Tier 3** — see below. |
 | **Blocked on** | Nothing. |
-| **Next action** | **Master decision on Tier 3 scope.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery — see "Next up". |
-| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **194 passing tests**, `scripts/` verify m0–m7 + simulator export/verify, `results/` acceptance logs, `web/` browser simulator, `FINDINGS.md`, `README.md`. |
+| **Next action** | **Import the repo in Vercel (root directory `site`) and add the live URL to README.md and PROGRESS.md.** Then: **Master decision on Tier 3 scope.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery — see "Next up". |
+| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **195 passing tests**, `scripts/` verify m0–m7 + simulator export/verify + site export, `results/` acceptance logs, `web/` browser simulator, `site/` live site, `FINDINGS.md`, `README.md`. |
 
 ---
 
@@ -324,6 +324,55 @@ venv, empty cache, today's endpoint**. Done at a short temp path (`rf/`, deleted
 Not found: no drift between the master venv and a fresh install (both pandas 3.0.5 / numpy
 2.4.6 / pvlib 0.15.2 / torch 2.14.0+cpu).
 
+---
+
+## Live site (2026-09-12)
+
+Concept and plan approved by the Master on 2026-09-12 (Next.js + three.js + framer-motion, same
+repo under `site/`, fresh single-seed agents for the "learnt" exports, errors section kept, Vercel
+Hobby). Redirected mid-build from a single scroll to **a nav bar and one page per section**, with one
+uniform template (header → stat row → panels → note).
+
+**What it is.** Next.js 16 static export (`output: "export"`, no server), eight routes: overview
+(WebGL hero — a dust field driven by real AOD, an array soiling at the storm model's rate, the year
+playing through), calibration, detection, learning, simulator, verdict, errors, reproduce.
+
+**What it shows, and where it comes from.** The site has no numbers of its own.
+`scripts/export_site_data.py` writes `site/public/data/`: `weather.json` (ten years, from the engine),
+`gate.json` (the M3 sweep, **asserted equal to `results/m3_verify.log`**), `ppo.json` (one PPO seed
+trained as M4 trained it, with the policy captured **untrained / 10% / 30% / trained** via a new
+default-preserving `checkpoint` argument on `rimal.agents.ppo.train`, plus the trained actor's
+weights), `fleet.json` (M6's estimator day by day), `qrdqn.json` (one QR-DQN seed's quantile fans),
+`results.json` (every headline number **parsed by regex from `results/*.log`** — a number the pattern
+cannot find is an error, not a default).
+
+**The physics in the browser is the engine's.** `site/src/lib/physics/rimal.js` is the simulator port
+as an ES module; `scripts/verify_simulator.py --module` runs it under node against the engine:
+**10/10** — soiling to 6.8e-5, energy to 0.017%, identical rain and cleaning days for naive, belief,
+fixed, guarded **and the trained PPO actor (its JS forward pass vs torch, day for day)**. Under test in
+`tests/test_simulator.py`. On exact readings the trained actor cleans 16/10/19 times on 2023–25 against
+the naive 0.93 rule's 16/11/19 — it rediscovered the threshold.
+
+**Verified.** `tsc --noEmit` and `eslint` clean · `npm run build` 9 static routes · every route
+audited in headless Chrome at 1440×900 and 390×844 (`site/scripts/shoot.mjs`): zero console errors,
+zero failed requests, no horizontal overflow, served from the `out/` export by a plain file server ·
+Lighthouse desktop on the export: home **80 / 100 / 100 / 100** (perf / a11y / best practices / SEO,
+LCP 1.7 s on software GL), learning 93, simulator 94, both a11y 100 · chart palette validated for CVD
+separation and contrast against the surface (dataviz validator).
+
+**Bugs found and fixed during the build.** An intermittent crash on the mobile home page (day index
+racing the data load — clamped); Lenis swallowing `#anchor` navigation (moot after the move to
+routes); WebGL context loss leaving a white rectangle (now falls back to the static hero); Next's
+link prefetch requesting RSC payload files the static export names differently (prefetch disabled —
+click navigation itself works, 62 ms); the hero lede painting only after hydration (LCP 2.5 s → 1.7 s
+by animating it in CSS); an `aria-label` on a plain div and a 4.4:1 chip contrast (a11y 90 → 100).
+
+**Not verified:** the Vercel deployment itself — the import is a Master account action. The
+stand-alone `web/simulator.html` is unchanged.
+
+**Deviation from the site plan:** GSAP is present (it drives Lenis from its ticker and registers
+ScrollTrigger) but no scroll-scrubbed timeline survived the move from one scroll to eight pages.
+
 **Constraints:** no conflicts. ZERO COST (NASA POWER, node, torch-CPU) and LAPTOP-ONLY
 hold; `web/sim_data.json` is 26 KB of derived held-out data, not raw data.
 
@@ -510,6 +559,7 @@ assumed an agent worth deploying. It is not the right Tier 3 for the result we g
 | 6 | ~~Approve Tiers 2–3?~~ | Master session | ✅ **Tier 2 approved** 2026-08-29; Tier 3 still open |
 | 7 | ~~Re-run `scripts/m4_verify.py` for the archival record.~~ | Master session | ✅ Done 2026-09-05: **M4 PASSED 5/5**, PPO $27,635 ± 10 vs tuned threshold $27,651 (−$16). Same conclusion as before, tighter seeds. |
 | 5 | ~~Authorise the initial push?~~ | Master session | ✅ Authorised and pushed 2026-08-29 |
+| 9 | **Import the repository in Vercel** (framework Next.js, root directory `site`) and paste the resulting `*.vercel.app` URL into README.md's status line and here. Account action; cannot be done from a session. | Master session 2026-09-12 | ⏳ Open |
 | 8 | **Are the two claude.ai artifact links public?** README's headline "▶ Run the live simulator" and the FINDINGS link point to claude.ai artifacts, which are private by default. If not explicitly shared, the public repo's front door links to pages a stranger cannot open. Cannot be verified from a session; check in a browser while signed out. `web/simulator.html` is self-contained and could be linked directly instead. | Master session 2026-09-11 | ⏳ Open |
 
 ---
@@ -577,6 +627,7 @@ Newest first. Every session appends one row before stopping.
 
 | Date | Machine | Who | Phase | What advanced | Commit |
 |---|---|---|---|---|---|
+| 2026-09-12 | Master laptop | Master | 4 (site) | **Built the live site** under `site/` (Next.js 16 static export, three.js hero, framer-motion, D3 charts; eight routes with a nav bar and one uniform template after a mid-build redirect away from a single scroll). `scripts/export_site_data.py` produces every number the site shows from the engine and `results/` (PPO checkpoints via a new default-preserving `checkpoint` argument on `ppo.train`); the browser physics module passes the node harness **10/10 incl. the trained PPO actor vs torch**. Audited every route at two widths in headless Chrome (zero errors), Lighthouse desktop 80–95 perf / 100 a11y, six bugs fixed. Tests 194 → 195. **Vercel import is the Master's next action.** | *(this commit)* |
 | 2026-09-11 → 12 | Master laptop | Master | 4 (review) | **Reviewed all collaborator work since `55a5488` (Phase 5 applied).** Found and fixed two data-layer faults: **NASA POWER changed the units of hourly `PRECTOTCORR`** between 08-29 and 09-11 (mm/day rate → per-hour depth; a fresh clone computed 7.1 mm/yr instead of 171.4), now normalised against the daily product at fetch time; and the **2015 lead-in year was cached corrupted** (−99,000/h) and read back unchecked (1 Jan 2016 rain −16,498 mm/day) — cache files are now validated on read; 2015 refetched. M0 gained rainfall-integrity checks (13/13). **Re-ran M4–M7 on the corrected environment** and re-baselined every published number; logs committed under `results/`. **M5's declared criterion (b) did not replicate** (+$29, p = 0.165 vs the published +$64, p = 0.030) and is recorded as failed; `m6_verify.py` strengthened to 120-episode paired evaluation. **Audited the review from a fresh clone** (A1–A5 above): `requirements.txt` lacked torch, the sim-data check demanded a byte equality the new upstream precision can't give, three stale figures — all fixed; fresh clone reproduces M0–M3 and 194 tests. Committed `scripts/export_sim_data.py` (reproduces the shipped simulator byte-for-byte) and `scripts/verify_simulator.py` (node harness: 8/8 against the engine), both under test. Recorded two unrecorded plan deviations (M5 recurrent PPO, M7 Lagrangian PPO). Tests 183 → 194. | *(this commit)* |
 | 2026-09-10 → 11 | Master laptop | Collaborator session *(reconstructed)* | 4 | Browser simulator `web/simulator.html` (JS port of the physics, verified in node but the harness was not committed); fixed three bugs it exposed — an undocumented −99,000 rainfall fill passing the parser, the first configured year losing its first local day (now one year of lead-in), and the energy table not re-trimmed with the daily frame. Tests 176 → 183. Rewrote both HANDOFF.md prompts. **Did not update PROGRESS.md.** | `5c31785`, `32f4b1a` |
 | 2026-09-09 | Master laptop | Collaborator session *(reconstructed)* | 4 | Recorded the post-completion audit in PROGRESS.md. | `c24a2a2` |

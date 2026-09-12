@@ -29,13 +29,21 @@ draw noise from different generators (mulberry32 vs numpy); what is being
 checked is the filter and the decision rule, which are deterministic.
 
 Usage:
-    python scripts/verify_simulator.py
+    python scripts/verify_simulator.py                                  # web/simulator.html
+    python scripts/verify_simulator.py --module site/src/lib/physics/rimal.js
+
+With ``--module`` the same checks run against the site's ES-module port, fed
+``site/public/data/weather.json``, and two more rules are compared: the
+``guarded`` rule (``ScheduleAwareThreshold``) and, when ``ppo.json`` carries
+the trained actor, the ``ppo`` policy -- the module's tanh-MLP forward pass
+against torch on the same held-out days.
 
 Requires ``node`` on PATH (any recent LTS). Exits non-zero on any failure.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import re
@@ -46,10 +54,12 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from rimal.baselines.belief import BeliefThreshold  # noqa: E402
+from rimal.agents.ppo import ActorCritic, PPOPolicy, RunningNorm  # noqa: E402
+from rimal.baselines.belief import BeliefThreshold, ScheduleAwareThreshold  # noqa: E402
 from rimal.baselines.policies import FixedInterval, NeverClean, SoilingThreshold  # noqa: E402
 from rimal.config import DATA, SOILING  # noqa: E402
 from rimal.env.cleaning_env import Economics, EnvConfig, RimalCleaningEnv  # noqa: E402
@@ -57,6 +67,8 @@ from rimal.env.observation import ObservationNoise, SoilingKalmanFilter  # noqa:
 
 ROOT = Path(__file__).resolve().parents[1]
 SIMULATOR = ROOT / "web" / "simulator.html"
+SITE_DATA = ROOT / "site" / "public" / "data" / "weather.json"
+SITE_PPO = ROOT / "site" / "public" / "data" / "ppo.json"
 YEARS = DATA.holdout_years
 THRESHOLD = 0.93
 FIXED_DAYS = 31
@@ -93,6 +105,58 @@ process.stdout.write(JSON.stringify(OUT));
 """
 
 
+MODULE_DRIVER = r"""
+import * as R from MODULE_URL;
+import { readFileSync } from 'node:fs';
+const DATA = JSON.parse(readFileSync(WEATHER_PATH, 'utf8'));
+const ACTOR = ACTOR_JSON;
+const OUT = {};
+const POLICIES = ['never', 'naive', 'belief', 'fixed', 'guarded'].concat(ACTOR ? ['ppo'] : []);
+for (const year of YEARS) {
+  OUT[year] = {};
+  for (const policy of POLICIES) {
+    const r = R.simulate(DATA, year, policy, 0, THRESHOLD, 0, { actor: ACTOR });
+    OUT[year][policy] = {
+      ratio: r.tTrue, cleanDays: r.cleanDays, rainDays: r.rainDays,
+      energy: r.energy, cleanEnergy: r.cleanEnergy, cleans: r.cleans,
+    };
+  }
+}
+OUT.constants = {
+  PRICE: R.PRICE, CLEAN_COST: R.CLEAN_COST, RAIN_THRESHOLD: R.RAIN_THRESHOLD, GRACE: R.GRACE,
+  MAX_SOILING: R.MAX_SOILING, STORM_EXP: R.STORM_EXP, MAX_RATE: R.MAX_RATE,
+  assumed_rate: DATA.meta.assumed_rate, aod_reference: DATA.meta.aod_reference,
+  kalman: (() => { const k = new R.Kalman(); const q = k.q; k.reset(); const v0 = k.v;
+                   k.resetEvent(false); const vr = k.v; return {q, v0, vr}; })(),
+};
+process.stdout.write(JSON.stringify(OUT));
+"""
+
+
+def load_site_actor() -> dict | None:
+    """The trained actor exported by export_site_data.py, if the full run exists."""
+    if not SITE_PPO.exists():
+        return None
+    stages = json.loads(SITE_PPO.read_text(encoding="utf-8")).get("stages", [])
+    return next((s["actor"] for s in reversed(stages) if "actor" in s), None)
+
+
+def actor_policy(actor: dict) -> PPOPolicy:
+    """Rebuild the exported actor in torch so the two forward passes can be compared."""
+    layers = actor["layers"]
+    obs_dim, hidden = len(layers[0]["w"][0]), len(layers[0]["w"])
+    net = ActorCritic(obs_dim, len(layers[-1]["w"]), hidden)
+    linear = [m for m in net.actor if isinstance(m, torch.nn.Linear)]
+    with torch.no_grad():
+        for module, layer in zip(linear, layers):
+            module.weight.copy_(torch.tensor(layer["w"], dtype=torch.float32))
+            module.bias.copy_(torch.tensor(layer["b"], dtype=torch.float32))
+    norm = RunningNorm((obs_dim,))
+    norm.mean = np.asarray(actor["normaliser"]["mean"], dtype=np.float64)
+    norm.var = np.asarray(actor["normaliser"]["var"], dtype=np.float64)
+    return PPOPolicy(net, norm, name="ppo-exported")
+
+
 def extract_port(html: str) -> str:
     """The data line plus the physics block, exactly as shipped."""
     data = re.search(r"^const DATA = \{.*\};$", html, re.M)
@@ -103,16 +167,19 @@ def extract_port(html: str) -> str:
     return data.group(0) + "\n" + html[start:end]
 
 
-def run_port() -> dict:
+def run_port(module: Path | None = None, actor: dict | None = None) -> dict:
     node = shutil.which("node")
     if node is None:
         raise RuntimeError("node is required on PATH to run the shipped JavaScript")
-    source = extract_port(SIMULATOR.read_text(encoding="utf-8"))
-    script = (
-        f"const YEARS = {json.dumps(list(YEARS))};\nconst THRESHOLD = {THRESHOLD};\n"
-        + source
-        + DRIVER
-    )
+    header = f"const YEARS = {json.dumps(list(YEARS))};\nconst THRESHOLD = {THRESHOLD};\n"
+    if module is None:
+        script = header + extract_port(SIMULATOR.read_text(encoding="utf-8")) + DRIVER
+    else:
+        script = header + (
+            MODULE_DRIVER.replace("MODULE_URL", json.dumps(module.resolve().as_uri()))
+            .replace("WEATHER_PATH", json.dumps(str(SITE_DATA)))
+            .replace("ACTOR_JSON", json.dumps(actor))
+        )
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "port.mjs"
         path.write_text(script, encoding="utf-8")
@@ -155,11 +222,16 @@ def run_engine(env: RimalCleaningEnv, policy, year: int) -> dict:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--module", type=Path, default=None, help="verify an ES-module port instead of web/simulator.html")
+    args = parser.parse_args()
     logging.disable(logging.CRITICAL)
-    print(f"\nSIMULATOR VERIFICATION -- {SIMULATOR} vs rimal, years {YEARS}\n")
+    target = args.module if args.module else SIMULATOR
+    actor = load_site_actor() if args.module else None
+    print(f"\nSIMULATOR VERIFICATION -- {target} vs rimal, years {YEARS}\n")
 
     print("[1] Running the shipped JavaScript under node")
-    port = run_port()
+    port = run_port(args.module, actor)
 
     exact = RimalCleaningEnv(EnvConfig(years=YEARS, soiling_model="storm"))
     # The belief policy reads rain and noise-scale slots that only the noisy
@@ -242,6 +314,12 @@ def main() -> int:
         "belief": (belief_env, lambda: BeliefThreshold(THRESHOLD)),
         "fixed": (exact, lambda: FixedInterval(FIXED_DAYS)),
     }
+    if args.module:
+        rules["guarded"] = (exact, lambda: ScheduleAwareThreshold(THRESHOLD))
+        if actor is not None:
+            rules["ppo"] = (exact, lambda: actor_policy(actor))
+        else:
+            print("      (ppo.json carries no trained actor yet -- ppo rule not compared)")
     for key, (env, make) in rules.items():
         all_same = True
         detail = []

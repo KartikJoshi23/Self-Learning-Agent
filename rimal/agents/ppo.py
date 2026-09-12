@@ -214,8 +214,18 @@ def train(
     seed: int = 0,
     progress: bool = True,
     wrapper=None,
+    checkpoint=None,
 ) -> tuple[ActorCritic, RunningNorm, TrainingLog]:
-    """Train PPO and return the network, its observation normaliser and a log."""
+    """Train PPO and return the network, its observation normaliser and a log.
+
+    ``checkpoint``, if given, is called as ``checkpoint(global_step, agent,
+    normaliser)`` before the first update and after every update, with the
+    live objects (copy them if you keep them). It exists so the *course* of
+    learning can be recorded -- what the policy looked like untrained, part
+    way, and trained -- without changing anything about training itself: the
+    default of ``None`` leaves this function exactly as the acceptance scripts
+    ran it.
+    """
     config = config or PPOConfig()
 
     torch.set_num_threads(config.torch_threads)
@@ -248,6 +258,9 @@ def train(
     num_updates = config.total_timesteps // config.batch_size
     global_step = 0
     recent: list[float] = []
+
+    if checkpoint is not None:
+        checkpoint(0, agent, normaliser)
 
     for update in range(1, num_updates + 1):
         if config.anneal_lr:
@@ -342,6 +355,9 @@ def train(
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), config.max_grad_norm)
                 optimizer.step()
+
+        if checkpoint is not None:
+            checkpoint(global_step, agent, normaliser)
 
         if recent:
             log.updates.append(update)

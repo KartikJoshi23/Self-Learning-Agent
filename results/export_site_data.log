@@ -1,0 +1,24 @@
+[weather]
+      wrote site\public\data\weather.json (123 KB) in 0s
+[ppo]
+      update   73/732  step   149,504  episode return     -1,441
+      update  146/732  step   299,008  episode return     -1,471
+      update  219/732  step   448,512  episode return     -1,365
+      update  292/732  step   598,016  episode return     -1,318
+      update  365/732  step   747,520  episode return     -1,430
+      update  438/732  step   897,024  episode return     -1,396
+      update  511/732  step 1,046,528  episode return     -1,299
+      update  584/732  step 1,196,032  episode return     -1,289
+      update  657/732  step 1,345,536  episode return     -1,266
+      update  730/732  step 1,495,040  episode return     -1,410
+      PPO trained in 372s; checkpoints at steps [0, 151552, 450560, 1499136]
+      wrote site\public\data\ppo.json (186 KB) in 373s
+[qrdqn]
+      step        0  epsilon 1.000
+      step   80,000  epsilon 0.510
+      step  160,000  epsilon 0.020
+      step  240,000  epsilon 0.020
+      step  320,000  epsilon 0.020
+      QR-DQN trained in 868s
+      wrote site\public\data\qrdqn.json (120 KB) in 882s
+EXIT 0

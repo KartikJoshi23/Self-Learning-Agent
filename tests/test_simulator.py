@@ -48,3 +48,12 @@ def test_shipped_simulator_physics_agrees_with_the_engine():
     result = _run("verify_simulator.py")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SIMULATOR VERIFIED" in result.stdout
+
+
+@pytest.mark.network
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not on PATH")
+def test_site_physics_module_agrees_with_the_engine():
+    """The site's ES-module port must pass the same harness, plus guarded/ppo."""
+    result = _run("verify_simulator.py", "--module", "site/src/lib/physics/rimal.js")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "SIMULATOR VERIFIED" in result.stdout

@@ -26,3 +26,13 @@ Thumbs.db
 
 # Energy lookup cache (rebuild with rimal.env.build_energy_table)
 rimal/env/cache/
+
+# Site (Next.js) — dependencies and build output; source and public/data are committed
+site/node_modules/
+site/.next/
+site/out/
+site/*.tsbuildinfo
+site/.vercel/
+
+# Local tool config
+.claude/

@@ -4,8 +4,8 @@
 
 A reinforcement-learning benchmark for **photovoltaic soiling and cleaning dispatch in desert conditions**, calibrated to Dubai's Mohammed bin Rashid Al Maktoum Solar Park.
 
-> **Status: complete.** Eight milestones, M0–M7. 194 tests. Every headline number traces to a log in `results/`.
-> **[▶ Run the live simulator](https://claude.ai/code/artifact/7911f3e9-7cc6-4dcc-af5d-c6d7b1a16c21)** · **[Read the findings →](FINDINGS.md)**
+> **Status: complete.** Eight milestones, M0–M7. 195 tests. Every headline number traces to a log in `results/`.
+> **[Read the findings →](FINDINGS.md)** · **Live site:** built from [`site/`](site/) and deployed on Vercel (link added once the project is imported) · [stand-alone simulator](web/simulator.html)
 
 ### Try it in 30 seconds
 
@@ -84,6 +84,7 @@ Checks are labelled `declared` (approved in the plan) versus `scrutiny` (harder 
 | `scripts/` | one acceptance script per milestone, plus the simulator export and its verification harness |
 | `results/` | the observed output of every acceptance script, as last run |
 | `web/` | the browser simulator: `simulator.html` (self-contained), its template and exported data |
+| `site/` | the live site: Next.js static export, eight pages, every number from `results/` or the engine via `scripts/export_site_data.py` |
 
 The environment is a low-dimensional stochastic simulator — thousands of steps per second on CPU. **No GPU. Zero cost.** All data is free and redistributable: [NASA POWER](https://power.larc.nasa.gov/) supplies irradiance, weather *and* aerosol optical depth with no registration.
 

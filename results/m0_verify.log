@@ -8,7 +8,7 @@ M0 ACCEPTANCE -- MBR Solar Park (Seih Al-Dahal), 2016-2025
   PASS  no missing values after fill-value handling: 0 missing cells across 789,048
 
 [2] Idempotency and offline replay
-  PASS  second fetch is byte-identical: re-read 87,672 rows in 0.06s
+  PASS  second fetch is byte-identical: re-read 87,672 rows in 0.05s
   PASS  replays with network disabled: served fully from cache
 
 [3] Physical sanity
