@@ -16,9 +16,20 @@ encoded here:
    Requests are chunked one calendar year at a time (9 parameter-years),
    which stays comfortably inside the cap and keeps cache keys simple.
 2. Missing values are returned as the sentinel -999, not as null.
+3. The units of hourly ``PRECTOTCORR`` are not stable upstream. Between
+   2026-08-29 and 2026-09-11 the hourly endpoint switched this one parameter
+   from a mm/day *rate* to a per-hour *depth* while every other column stayed
+   byte-identical (2020: ``old == 24 * new`` to within the 0.005 mm rounding
+   of the new product; annual mean x days went from 171.5 mm to 7.1 mm while
+   the daily product stayed at 171.4 mm). Every fetch therefore establishes
+   the units it was served against POWER's own daily product for the same
+   year and normalises to the project's canonical form -- see
+   ``RAIN_CANONICAL_UNITS`` -- before anything is cached. A fetch whose units
+   cannot be established is refused.
 
 Fetches are cached to parquet keyed by site and year, so the first call needs
-network access and every subsequent call does not.
+network access and every subsequent call does not. Cached files hold canonical
+units and are re-validated against physical bounds every time they are read.
 """
 
 from __future__ import annotations
@@ -35,9 +46,33 @@ from rimal.config import DATA, MBR_SOLAR_PARK, Site
 logger = logging.getLogger(__name__)
 
 POWER_HOURLY_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
+POWER_DAILY_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
 
 #: NASA POWER's documented sentinel for a missing value.
 FILL_VALUE = -999.0
+
+#: Canonical units for hourly ``PRECTOTCORR`` throughout this project: a
+#: **mm/day rate**, the form the endpoint served when every cached year and
+#: every published result was produced. ``daily_summary`` averages it.
+#:
+#: The hourly endpoint has served the same parameter as a per-hour depth since
+#: at least 2026-09-11 (module docstring, point 3). Rather than move the
+#: project onto whichever form the endpoint serves today -- which would
+#: invalidate every cached year and fail again the next time it changes --
+#: each fetch is classified against POWER's daily product for the same year
+#: and converted to this form before it is cached.
+RAIN_CANONICAL_UNITS = "mm/day rate"
+
+#: Hourly values in mm/day-rate form sum, over a year, to 24x the daily
+#: product's annual total; per-hour depths sum to 1x. The two forms are
+#: distinguished by that ratio and converted by this factor.
+RAIN_RATE_PER_DEPTH = 24.0
+
+#: How far the hourly/daily annual-total ratio may sit from 24 (rate) or 1
+#: (depth) and still be classified. The two forms differ by a factor of 24, so
+#: this is generous without being ambiguous; the rounding loss of the depth
+#: product (drizzle hours below 0.005 mm round to zero) was measured at 0.7%.
+RAIN_UNITS_TOLERANCE = 0.10
 
 #: Physically impossible values, rejected regardless of the sentinel used.
 #:
@@ -96,6 +131,19 @@ def _parse_response(payload: dict) -> pd.DataFrame:
     frame.index = pd.to_datetime(frame.index, format="%Y%m%d%H", utc=True)
     frame = frame.sort_index().astype("float64")
     frame.index.name = "timestamp_utc"
+    return _clean(frame)
+
+
+def _clean(frame: pd.DataFrame) -> pd.DataFrame:
+    """Turn sentinels and physically impossible values into NaN.
+
+    Applied to fresh payloads and to cached files alike: a file written before
+    a guard existed must not bypass it. Observed 2026-09-11 -- the lead-in year
+    2015 had been cached with PRECTOTCORR at -99,000 for every hour, nine
+    minutes before the physical-floor guard was committed, and read back
+    unchecked into the training environment as a -16,498 mm/day rain on
+    1 January 2016.
+    """
     # NaN rather than pd.NA: these columns stay float64 so pvlib and numpy can
     # consume them directly without an object-dtype detour.
     frame = frame.replace(FILL_VALUE, np.nan)
@@ -107,8 +155,8 @@ def _parse_response(payload: dict) -> pd.DataFrame:
     return frame
 
 
-def _validate(frame: pd.DataFrame, year: int) -> None:
-    """Refuse a fetch that is too incomplete to use.
+def _validate(frame: pd.DataFrame, year: int, source: str = "NASA POWER") -> None:
+    """Refuse a frame that is too incomplete to use.
 
     Failing here is the point: a silently wrong rainfall series is far worse
     than a fetch that stops and says so.
@@ -118,11 +166,94 @@ def _validate(frame: pd.DataFrame, year: int) -> None:
     if not bad.empty:
         detail = ", ".join(f"{name} {share:.0%} missing" for name, share in bad.items())
         raise PowerFetchError(
-            f"NASA POWER returned unusable data for {year}: {detail}. "
+            f"{source} holds unusable data for {year}: {detail}. "
             "Values outside physical bounds are treated as missing; this usually "
             "means an upstream fault on those parameters rather than a bug here. "
-            "The cached parquet files, if present, are unaffected."
+            "If the source is a cached file, delete it and fetch again."
         )
+
+
+def _fetch_daily_rain_total_mm(year: int, site: Site) -> float:
+    """Annual rainfall for ``year`` from POWER's *daily* product, in mm.
+
+    The daily product is the units reference for the hourly one: its
+    ``PRECTOTCORR`` has stayed a mm/day depth throughout, and its annual total
+    is what any correct reading of the hourly series must reproduce.
+    """
+    response = requests.get(
+        POWER_DAILY_URL,
+        params={
+            "parameters": "PRECTOTCORR",
+            "community": "RE",
+            "latitude": site.latitude,
+            "longitude": site.longitude,
+            "start": f"{year}0101",
+            "end": f"{year}1231",
+            "format": "JSON",
+        },
+        timeout=REQUEST_TIMEOUT_S,
+    )
+    if not response.ok:
+        raise PowerFetchError(
+            f"NASA POWER daily product returned HTTP {response.status_code} for "
+            f"{year}; cannot establish the units of the hourly rainfall"
+        )
+    try:
+        values = response.json()["properties"]["parameter"]["PRECTOTCORR"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PowerFetchError(
+            f"NASA POWER daily product for {year} had no PRECTOTCORR: {exc}"
+        ) from exc
+    daily = pd.Series(values, dtype="float64").replace(FILL_VALUE, np.nan)
+    daily[daily < 0.0] = np.nan
+    return float(daily.sum())
+
+
+def _rain_units_factor(hourly_total: float, daily_total_mm: float, year: int) -> float:
+    """Return the factor that puts an hourly rainfall series into canonical units.
+
+    ``hourly_total`` is the plain sum of the hourly values over the year;
+    ``daily_total_mm`` is the daily product's annual total. Their ratio is
+    ~24 when the hourly series is a mm/day rate (canonical: factor 1) and ~1
+    when it is a per-hour depth (factor 24). Anything else is refused.
+    """
+    if not daily_total_mm > 0.0:
+        raise PowerFetchError(
+            f"NASA POWER daily product reports no rainfall for {year}; the units "
+            "of the hourly series cannot be established"
+        )
+    ratio = hourly_total / daily_total_mm
+    if abs(ratio / RAIN_RATE_PER_DEPTH - 1.0) <= RAIN_UNITS_TOLERANCE:
+        return 1.0
+    if abs(ratio - 1.0) <= RAIN_UNITS_TOLERANCE:
+        return RAIN_RATE_PER_DEPTH
+    raise PowerFetchError(
+        f"NASA POWER hourly PRECTOTCORR for {year} sums to {ratio:.2f}x the daily "
+        f"product's annual total ({daily_total_mm:.1f} mm); expected ~24 (mm/day "
+        "rate) or ~1 (per-hour depth). Refusing to guess the units."
+    )
+
+
+def _normalise_rain_units(frame: pd.DataFrame, year: int, site: Site) -> pd.DataFrame:
+    """Convert a freshly fetched frame's rainfall to ``RAIN_CANONICAL_UNITS``."""
+    if "PRECTOTCORR" not in frame.columns:
+        return frame
+    factor = _rain_units_factor(
+        float(frame["PRECTOTCORR"].sum()),
+        _fetch_daily_rain_total_mm(year, site),
+        year,
+    )
+    if factor != 1.0:
+        logger.info(
+            "NASA POWER served hourly PRECTOTCORR for %d as a per-hour depth; "
+            "converted x%g to the canonical %s",
+            year,
+            factor,
+            RAIN_CANONICAL_UNITS,
+        )
+        frame = frame.copy()
+        frame["PRECTOTCORR"] = frame["PRECTOTCORR"] * factor
+    return frame
 
 
 def fetch_year(
@@ -137,12 +268,17 @@ def fetch_year(
 
     Reads from the parquet cache when available. Only reaches the network on a
     cache miss or when ``force_refresh`` is set, which makes repeat calls both
-    idempotent and offline-replayable.
+    idempotent and offline-replayable. A cached file is re-validated on every
+    read and refused, naming the file, if it fails -- it holds canonical
+    rainfall units by construction, but the physical-bounds guard must not be
+    bypassable by a file written before the guard existed.
     """
     path = _cache_path(site, year, cache_dir)
     if path.exists() and not force_refresh:
         logger.debug("cache hit for %s %d", site.name, year)
-        return pd.read_parquet(path)
+        frame = _clean(pd.read_parquet(path))
+        _validate(frame, year, source=f"cached file {path}")
+        return frame
 
     logger.info("fetching NASA POWER for %s %d", site.name, year)
     response = requests.get(
@@ -171,8 +307,10 @@ def fetch_year(
     if missing:
         raise PowerFetchError(f"NASA POWER omitted requested parameters: {missing}")
 
-    # Validate BEFORE caching, so a bad fetch is never written to disk.
+    # Validate BEFORE caching, so a bad fetch is never written to disk. Bounds
+    # first, then units: a corrupt series has no units worth establishing.
     _validate(frame, year)
+    frame = _normalise_rain_units(frame, year, site)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path)
@@ -254,13 +392,19 @@ def daily_summary(
     Irradiance is summed to Wh/m2/day, because POWER serves it as W/m2 and an
     hourly step makes the sum an energy. Drivers are averaged.
 
-    Rainfall is **averaged, not summed**. POWER declares hourly ``PRECTOTCORR``
-    in ``mm/day`` -- it is an instantaneous rate expressed per day, not a
-    per-hour depth -- so summing the 24 hourly values overcounts by 24x.
-    Verified 2026-08-29 for 2020: the hourly mean totals 171.5 mm/yr against
-    POWER's own daily product at 171.4 mm/yr, while the sum gives 4116 mm.
-    This matters a great deal: rainfall is the natural-cleaning trigger, and
-    the 24x error turned 4 washing days per year into 40.
+    Rainfall is **averaged, not summed**. Hourly ``PRECTOTCORR`` reaches this
+    function in the project's canonical form -- a mm/day *rate*, which is what
+    POWER served on 2026-08-29 -- so summing the 24 hourly values overcounts by
+    24x. Verified 2026-08-29 for 2020: the hourly mean totals 171.5 mm/yr
+    against POWER's own daily product at 171.4 mm/yr, while the sum gives
+    4116 mm. This matters a great deal: rainfall is the natural-cleaning
+    trigger, and the 24x error turned 4 washing days per year into 40.
+
+    The endpoint has since switched to serving a per-hour depth (module
+    docstring, point 3), which averaged here would be 24x too *low* -- 7.1 mm
+    for 2020. ``fetch_year`` establishes the served units against the daily
+    product and converts to the canonical rate before caching, so this
+    function's contract does not move with the endpoint.
 
     POWER serves UTC, and Dubai is UTC+4, so converting to local time leaves a
     truncated day at each end of the record -- including a phantom day in the
@@ -282,7 +426,7 @@ def daily_summary(
         "T2M": "mean",
         "WS2M": "mean",
         "RH2M": "mean",
-        "PRECTOTCORR": "mean",  # mm/day rate - see docstring; must NOT be summed
+        "PRECTOTCORR": "mean",  # canonical mm/day rate - see docstring; NOT summed
         "AOD_55": "mean",
     }
     present = {k: v for k, v in aggregations.items() if k in local.columns}

@@ -1,0 +1,61 @@
+
+M7 ACCEPTANCE -- risk sensitivity and the water constraint
+
+      10 years x 25 seeds = 250 episodes per policy
+
+[1] The tail M1 clipped away
+  PASS  clipping the soiling rate materially overstated CVaR: best CVaR@5% $27,302 clipped vs $26,911 with storms -- overstated by $391/MWp/yr
+
+[2] Risk/return frontier over threshold rules
+ threshold     mean   std    cvar5
+       0.9 27,759.3 763.2 26,439.4
+       0.9 27,903.0 731.9 26,494.4
+       0.9 28,042.0 710.2 26,767.8
+       0.9 28,074.4 687.2 26,848.7
+       1.0 28,019.6 640.5 26,910.9
+       1.0 27,826.9 609.5 26,758.1
+  PASS  the mean-optimal and CVaR-optimal policies genuinely differ: mean-optimal threshold 0.94, CVaR-optimal 0.96; buying $62 of CVaR costs $55 of mean
+  PASS  clipping destroyed that trade-off entirely: under clipping both optima sit at 0.94 -- no trade-off to study
+
+[3] Water budget as a constrained MDP
+      unconstrained    net $    27,229   water p95   51.0 m3   satisfied 100.0%
+      60 m3/MWp        net $    27,229   water p95   51.0 m3   satisfied 100.0%
+      30 m3/MWp        net $    27,213   water p95   25.5 m3   satisfied 100.0%
+      15 m3/MWp        net $    27,192   water p95    8.5 m3   satisfied 100.0%
+  PASS  the water constraint is satisfied whenever it is imposed: 100.0% minimum satisfaction across 3 budgets
+  PASS  constraint satisfaction costs little return: tightest budget costs $37/MWp/yr (0.14%)
+
+[4] QR-DQN: does CVaR selection beat risk-neutral selection? (3 seeds x 400,000 steps)
+      seed 0: a=1.00 mean $27,306 cvar $26,849  a=0.50 mean $27,354 cvar $26,862  a=0.25 mean $27,339 cvar $26,844  a=0.10 mean $27,332 cvar $26,822
+      seed 1: a=1.00 mean $27,243 cvar $26,674  a=0.50 mean $27,247 cvar $26,720  a=0.25 mean $27,243 cvar $26,715  a=0.10 mean $27,139 cvar $26,551
+      seed 2: a=1.00 mean $27,286 cvar $26,755  a=0.50 mean $27,323 cvar $26,811  a=0.25 mean $27,309 cvar $26,782  a=0.10 mean $27,304 cvar $26,812
+
+           mean    cvar5
+alpha                  
+0.10  27,258.6 26,728.4
+0.25  27,296.6 26,780.3
+0.50  27,307.7 26,797.7
+1.00  27,278.3 26,759.5
+      CVaR by risk level (alpha 1.00 = risk-neutral):
+        alpha 1.00  mean $27,278  CVaR $26,759
+        alpha 0.50  mean $27,308  CVaR $26,798
+        alpha 0.25  mean $27,297  CVaR $26,780
+        alpha 0.10  mean $27,259  CVaR $26,728
+  FAIL  CVaR@5% rises monotonically as risk aversion increases: NOT monotone -- $26,759 -> $26,798 -> $26,780 -> $26,728 as alpha falls 1.00 -> 0.10; the ordering is noise, not risk sensitivity
+
+[5] Like-for-like: threshold tuned on TRAIN, both scored on HELD-OUT
+      CVaR-tuned threshold 0.96 (tuned on train): mean $27,328, CVaR $26,890  [180 episodes]
+          mean          cvar5      
+          mean   std     mean   std
+alpha                              
+0.10  27,127.5 191.8 26,068.2 829.1
+0.25  27,136.2 147.4 26,388.5 299.4
+1.00  27,124.7 170.1 26,343.8 488.8
+  FAIL  the risk-sensitive agent beats the CVaR-tuned rule, like for like [scrutiny]: alpha=0.25: CVaR $26,388 vs rule $26,890 (-501), seed sd $299 at n=3; mean $27,136 vs $27,328
+
+      figure written to figures\m7_risk.png
+
+==============================================================
+M7 declared criteria: FAILED -- CVaR@5% rises monotonically as risk aversion increases
+M7 scrutiny checks:   FAILED -- the risk-sensitive agent beats the CVaR-tuned rule, like for like
+==============================================================

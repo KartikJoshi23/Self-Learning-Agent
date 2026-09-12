@@ -9,6 +9,11 @@ The Phase 3 plan declared M0's verification before M0 was built:
 This script performs those checks and reports PASS/FAIL for each. It is the
 evidence that M0 is done -- not the fact that the code runs.
 
+Section [5] (rainfall integrity) was added 2026-09-11, after M0 was declared
+done, in response to two rainfall faults that the declared checks could not
+see: an upstream units change and a corrupted lead-in year. It is a
+strengthening of the gate, recorded as such; the declared checks are unchanged.
+
 Usage:
     python scripts/m0_verify.py
 """
@@ -164,6 +169,39 @@ def main() -> int:
         "seasonal amplitude is material (peak/trough > 1.3)",
         ratio > 1.3,
         f"ratio = {ratio:.2f}",
+    )
+
+    # --- Rainfall integrity -----------------------------------------------
+    # Added 2026-09-11 after two rainfall faults reached the data layer
+    # unnoticed: an upstream units change (hourly PRECTOTCORR switched from a
+    # mm/day rate to a per-hour depth, which averaged is 24x too low) and a
+    # lead-in year cached with -99,000 in every hour. Both are invisible to the
+    # checks above. The environment fetches one lead-in year before `start`,
+    # so this section covers it too.
+    print("\n[5] Rainfall integrity (units and sentinel guards), incl. lead-in year")
+    with_lead_in = power.fetch_years(start - 1, end)
+    rain_daily = power.daily_summary(with_lead_in)["PRECTOTCORR"]
+    annual_rain = rain_daily.groupby(rain_daily.index.year).sum()
+    print("      annual rainfall (mm):", ", ".join(
+        f"{y} {v:.0f}" for y, v in annual_rain.items()
+    ))
+
+    check(
+        "rainfall is never negative in any cached year (sentinel guard)",
+        bool((rain_daily >= 0).all()) and not rain_daily.isna().any(),
+        f"min {rain_daily.min():.2f} mm/day over {len(rain_daily):,} days, "
+        f"{rain_daily.isna().sum()} missing",
+    )
+
+    # Dubai gauges average ~80-110 mm/yr; POWER's reanalysis runs high in wet
+    # years. A 24x units error in either direction lands far outside this
+    # band (7 mm or 4,400 mm on the 2020 reference year).
+    check(
+        "mean annual rainfall in a physical band (30-1000 mm/yr; units guard)",
+        30.0 <= annual_rain.mean() <= 1000.0
+        and bool((annual_rain > 2.0).all()),
+        f"mean {annual_rain.mean():.0f} mm/yr, min {annual_rain.min():.0f}, "
+        f"max {annual_rain.max():.0f} over {len(annual_rain)} years",
     )
 
     # --- Figure ------------------------------------------------------------

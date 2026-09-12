@@ -14,6 +14,15 @@ M5 added a sharper question, and it is the one that decides Tier 2's fate:
 
 Usage:
     python scripts/m6_verify.py [--seeds 5] [--timesteps 1200000] [--skip-ppo]
+
+Held-out evaluations run ``EVAL_SEEDS`` stochastic realisations per year
+(added 2026-09-11). The fleet environment is stochastic -- Beta-distributed
+cleaning efficacy plus observation noise -- so a single realisation per year is
+three episodes, which cannot separate a policy difference from a lucky draw.
+The post-completion audit re-tested the two key comparisons at 120 episodes
+with paired t-tests but did so ad hoc; that computation now lives here, so the
+numbers in FINDINGS.md come from this script and nowhere else. The pass
+conditions are unchanged.
 """
 
 from __future__ import annotations
@@ -55,12 +64,20 @@ NOISE = ObservationNoise(base_std=0.03)
 THRESHOLD = 0.93
 COSTS = (5.0, 15.0, 30.0, 60.0, 120.0)
 THRESHOLD_GRID = np.round(np.arange(0.88, 0.995, 0.01), 3)
+#: Stochastic realisations per held-out year: 3 years x 40 = 120 episodes per
+#: cell, the same sampling M5 uses. Threshold tuning on training years stays at
+#: one realisation per year, as before.
+EVAL_SEEDS = 40
 
 
 def check(name: str, passed: bool, detail: str, declared: bool = True) -> None:
     RESULTS.append((name, passed, detail, declared))
     tag = "" if declared else " [scrutiny]"
     print(f"  {'PASS' if passed else 'FAIL'}  {name}{tag}: {detail}")
+
+
+def _fmt_p(p: float) -> str:
+    return "< 0.0001" if p < 1e-4 else f"= {p:.4f}"
 
 
 def fleet_config(years, cost: float = 60.0) -> EnvConfig:
@@ -90,12 +107,12 @@ def main() -> int:
             years=HOLDOUT_YEARS, observability="noisy", observation_noise=NOISE
         )
     )
-    perfect_net = evaluate(perfect_env, BeliefThreshold(THRESHOLD), HOLDOUT_YEARS)[
-        "net_usd"
-    ].mean()
-    fleet_net = evaluate(holdout_env, FleetHeuristic(THRESHOLD), HOLDOUT_YEARS)[
-        "net_usd"
-    ].mean()
+    perfect_net = evaluate(
+        perfect_env, BeliefThreshold(THRESHOLD), HOLDOUT_YEARS, seeds=EVAL_SEEDS
+    )["net_usd"].mean()
+    fleet_net = evaluate(
+        holdout_env, FleetHeuristic(THRESHOLD), HOLDOUT_YEARS, seeds=EVAL_SEEDS
+    )["net_usd"].mean()
     check(
         "stochastic partial cleaning costs measurable value vs a perfect reset",
         perfect_net - fleet_net > 50,
@@ -117,15 +134,28 @@ def main() -> int:
                 "net_usd"
             ].mean(),
         )
-        aware = evaluate(env, FleetHeuristic(float(best)), HOLDOUT_YEARS)
+        aware = evaluate(
+            env, FleetHeuristic(float(best)), HOLDOUT_YEARS, seeds=EVAL_SEEDS
+        )
         naive = evaluate(
-            env, FleetHeuristic(float(best), efficacy_aware=False), HOLDOUT_YEARS
+            env,
+            FleetHeuristic(float(best), efficacy_aware=False),
+            HOLDOUT_YEARS,
+            seeds=EVAL_SEEDS,
         )
         assumed = evaluate(
             env,
             FleetHeuristic(float(best), assume_perfect_cleaning=True),
             HOLDOUT_YEARS,
+            seeds=EVAL_SEEDS,
         )
+        if cost == 60.0:
+            # The paired tests at the default cost: same (year, seed) episodes
+            # under each policy, so the difference is paired by construction.
+            paired = {
+                "dispatch": aware["net_usd"].to_numpy() - naive["net_usd"].to_numpy(),
+                "partial": aware["net_usd"].to_numpy() - assumed["net_usd"].to_numpy(),
+            }
         rows.append(
             {
                 "cost": cost,
@@ -145,28 +175,36 @@ def main() -> int:
     sweep = pd.DataFrame(rows)
 
     penalty = sweep["aware"] - sweep["assumes_perfect"]
+    partial = paired["partial"]
+    partial_p = stats.ttest_1samp(partial, 0.0).pvalue
     check(
         "modelling partial cleaning beats assuming a perfect reset",
         bool((penalty > 0).all()),
         f"worth ${penalty.min():,.0f}-${penalty.max():,.0f}/MWp/yr across "
-        f"{len(COSTS)} cleaning costs -- real, but under 0.25%",
+        f"{len(COSTS)} cleaning costs -- real, but under 0.25%; at $60: "
+        f"{partial.mean():+,.1f} +/- {stats.sem(partial):,.1f} paired over "
+        f"{len(partial)} episodes, p {_fmt_p(partial_p)}",
     )
 
     # --- 3. Does learning WHICH robot pay? ----------------------------------
     print("\n[3] Does efficacy-aware dispatch beat the manufacturer's spec sheet?")
     dispatch_gain = sweep["aware"] - sweep["naive"]
+    dispatch = paired["dispatch"]
+    dispatch_p = stats.ttest_1samp(dispatch, 0.0).pvalue
     check(
         "efficacy-aware dispatch beats simply using the best available machine",
         bool((dispatch_gain > 0).any()),
-        "loses at EVERY cleaning frequency: "
+        ("wins at some frequency: " if (dispatch_gain > 0).any() else "loses at EVERY cleaning frequency: ")
         + ", ".join(
             f"${g:+,.0f} at {c:.0f} cleans/yr"
             for g, c in zip(dispatch_gain, sweep["cleans"])
-        ),
+        )
+        + f"; at $60: {dispatch.mean():+,.1f} +/- {stats.sem(dispatch):,.1f} paired over "
+        f"{len(dispatch)} episodes, p {_fmt_p(dispatch_p)}",
     )
 
     heuristic = FleetHeuristic(THRESHOLD)
-    evaluate(holdout_env, heuristic, HOLDOUT_YEARS)
+    evaluate(holdout_env, heuristic, HOLDOUT_YEARS, seeds=EVAL_SEEDS)
     estimates = heuristic.efficacy_estimates
     nominal = np.array([s.nominal_efficacy for s in DEWA_FLEET])
     rank_rho = stats.spearmanr(estimates, nominal).statistic
@@ -195,7 +233,7 @@ def main() -> int:
         config = fleet_config(HOLDOUT_YEARS)
         config.fleet_specs = specs
         env = RimalCleaningEnv(config)
-        frame = evaluate(env, FleetHeuristic(THRESHOLD), HOLDOUT_YEARS)
+        frame = evaluate(env, FleetHeuristic(THRESHOLD), HOLDOUT_YEARS, seeds=EVAL_SEEDS)
         degradation.append((multiplier, frame["net_usd"].mean()))
         print(f"      wear x{multiplier:<3} -> ${frame['net_usd'].mean():,.0f}/MWp/yr")
 

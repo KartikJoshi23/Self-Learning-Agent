@@ -1,0 +1,5 @@
+belief-threshold-0.93 on held-out years, 3 years x 40 seeds per noise level
+  noise 0.01: net $27,667.0  cleans/yr 8.4  (120 episodes)
+  noise 0.03: net $27,656.0  cleans/yr 8.4  (120 episodes)
+  noise 0.06: net $27,654.1  cleans/yr 8.3  (120 episodes)
+  noise 0.10: net $27,655.5  cleans/yr 8.3  (120 episodes)

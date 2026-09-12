@@ -1,0 +1,112 @@
+
+M4 ACCEPTANCE -- PPO agent
+
+      train    (2016, 2017, 2018, 2019, 2020, 2021, 2022)
+      held-out (2023, 2024, 2025)
+      5 seeds x 1,500,000 timesteps
+
+[1] Tuning the baselines on TRAINING years (same protocol as PPO)
+      tuned-threshold-0.930  and  tuned-fixed-31d
+
+      Baselines on held-out years (the bar to beat)
+               policy  mean_net_usd  std_net_usd  worst_net_usd  cvar5_net_usd  mean_cleans  soiling_loss_pct  n_years  n_episodes
+       threshold-0.93      27,677.0        276.3       27,373.1       27,373.1          8.3               2.5        3           3
+tuned-threshold-0.930      27,677.0        276.3       27,373.1       27,373.1          8.3               2.5        3           3
+       threshold-0.95      27,626.3        234.5       27,361.6       27,361.6         12.3               1.9        3           3
+       threshold-0.92      27,596.7        295.2       27,262.8       27,262.8          7.7               2.9        3           3
+      tuned-fixed-31d      27,526.1        160.1       27,343.8       27,343.8         11.0               2.5        3           3
+            fixed-34d      27,511.4        180.7       27,308.5       27,308.5         10.0               2.8        3           3
+            fixed-28d      27,454.8        121.2       27,315.3       27,315.3         13.0               2.3        3           3
+       threshold-0.97      27,276.4        314.5       26,922.5       26,922.5         22.0               1.1        3           3
+          never-clean      24,636.5      2,352.1       22,355.7       22,355.7          0.0              14.8        3           3
+         always-clean       6,987.1         73.7        6,904.5        6,904.5        365.3               0.0        3           3
+
+[2] Training PPO on (2016, 2017, 2018, 2019, 2020, 2021, 2022)
+
+    seed 0
+      update   73/732  step   149,504  episode return     -1,441
+      update  146/732  step   299,008  episode return     -1,471
+      update  219/732  step   448,512  episode return     -1,365
+      update  292/732  step   598,016  episode return     -1,318
+      update  365/732  step   747,520  episode return     -1,430
+      update  438/732  step   897,024  episode return     -1,396
+      update  511/732  step 1,046,528  episode return     -1,299
+      update  584/732  step 1,196,032  episode return     -1,289
+      update  657/732  step 1,345,536  episode return     -1,266
+      update  730/732  step 1,495,040  episode return     -1,410
+      trained in 751s -> held-out $27,663/MWp/yr, 8.7 cleans
+
+    seed 1
+      update   73/732  step   149,504  episode return     -1,440
+      update  146/732  step   299,008  episode return     -1,416
+      update  219/732  step   448,512  episode return     -1,376
+      update  292/732  step   598,016  episode return     -1,325
+      update  365/732  step   747,520  episode return     -1,401
+      update  438/732  step   897,024  episode return     -1,411
+      update  511/732  step 1,046,528  episode return     -1,341
+      update  584/732  step 1,196,032  episode return     -1,284
+      update  657/732  step 1,345,536  episode return     -1,250
+      update  730/732  step 1,495,040  episode return     -1,442
+      trained in 572s -> held-out $27,671/MWp/yr, 9.0 cleans
+
+    seed 2
+      update   73/732  step   149,504  episode return     -1,411
+      update  146/732  step   299,008  episode return     -1,509
+      update  219/732  step   448,512  episode return     -1,455
+      update  292/732  step   598,016  episode return     -1,346
+      update  365/732  step   747,520  episode return     -1,431
+      update  438/732  step   897,024  episode return     -1,421
+      update  511/732  step 1,046,528  episode return     -1,352
+      update  584/732  step 1,196,032  episode return     -1,312
+      update  657/732  step 1,345,536  episode return     -1,266
+      update  730/732  step 1,495,040  episode return     -1,489
+      trained in 535s -> held-out $27,600/MWp/yr, 7.0 cleans
+
+    seed 3
+      update   73/732  step   149,504  episode return     -1,425
+      update  146/732  step   299,008  episode return     -1,437
+      update  219/732  step   448,512  episode return     -1,452
+      update  292/732  step   598,016  episode return     -1,299
+      update  365/732  step   747,520  episode return     -1,345
+      update  438/732  step   897,024  episode return     -1,338
+      update  511/732  step 1,046,528  episode return     -1,263
+      update  584/732  step 1,196,032  episode return     -1,300
+      update  657/732  step 1,345,536  episode return     -1,217
+      update  730/732  step 1,495,040  episode return     -1,375
+      trained in 621s -> held-out $27,675/MWp/yr, 9.0 cleans
+
+    seed 4
+      update   73/732  step   149,504  episode return     -1,378
+      update  146/732  step   299,008  episode return     -1,403
+      update  219/732  step   448,512  episode return     -1,412
+      update  292/732  step   598,016  episode return     -1,372
+      update  365/732  step   747,520  episode return     -1,391
+      update  438/732  step   897,024  episode return     -1,343
+      update  511/732  step 1,046,528  episode return     -1,240
+      update  584/732  step 1,196,032  episode return     -1,316
+      update  657/732  step 1,345,536  episode return     -1,233
+      update  730/732  step 1,495,040  episode return     -1,355
+      trained in 763s -> held-out $27,675/MWp/yr, 8.3 cleans
+
+[3] PPO on held-out years, per seed
+ seed  net_usd  cleans  soiling_loss_pct  worst_year_usd
+    0 27,663.4     8.7               2.5        27,374.3
+    1 27,670.7     9.0               2.4        27,345.3
+    2 27,600.4     7.0               3.1        27,237.0
+    3 27,675.1     9.0               2.4        27,352.9
+    4 27,674.5     8.3               2.5        27,374.8
+
+      PPO mean $27,657 +/- 32 (worst seed $27,600) over 5 seeds
+      best baseline: threshold-0.93 $27,677
+      best fixed interval: tuned-fixed-31d $27,526
+  PASS  PPO beats the best FIXED-INTERVAL baseline (the plan's declared bar): $27,657 vs $27,526 (+131)
+  PASS  the margin over fixed intervals exceeds seed noise: mean - 1 sd = $27,625 vs $27,526
+  PASS  every seed beats never-cleaning: worst seed $27,600
+  PASS  seed variance is reported: 5 seeds, sd $32 (0.12% of mean)
+  PASS  the learned policy is not degenerate: mean 8.4 cleans/yr (range 7-9)
+
+      figure written to figures\m4_ppo.png
+
+==============================================================
+M4 PASSED -- 5/5 checks
+==============================================================

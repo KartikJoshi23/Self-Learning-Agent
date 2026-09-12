@@ -1,0 +1,45 @@
+
+M6 ACCEPTANCE -- stochastic cleaning efficacy and actuator wear
+
+[1] The physical cost of a fleet that does not fully clean
+  PASS  stochastic partial cleaning costs measurable value vs a perfect reset: $27,656 idealised vs $27,475 real (-$181/MWp/yr)
+
+[2] Declared ablation: what does ASSUMING perfect cleaning cost?
+        cost    thr   cleans  efficacy-aware  best-available  aware-naive  perfect-assn
+           5   0.98     42.3          28,493          28,506          -13            90
+          15   0.97     25.9          28,175          28,194          -19            75
+          30   0.96     18.5          27,876          27,908          -32            55
+          60   0.93      9.8          27,475          27,578         -103            28
+         120   0.88      5.0          26,986          27,024          -38            45
+  PASS  modelling partial cleaning beats assuming a perfect reset: worth $28-$90/MWp/yr across 5 cleaning costs -- real, but under 0.25%; at $60: +28.4 +/- 7.9 paired over 120 episodes, p = 0.0005
+
+[3] Does efficacy-aware dispatch beat the manufacturer's spec sheet?
+  FAIL  efficacy-aware dispatch beats simply using the best available machine: loses at EVERY cleaning frequency: $-13 at 42 cleans/yr, $-19 at 26 cleans/yr, $-32 at 19 cleans/yr, $-103 at 10 cleans/yr, $-38 at 5 cleans/yr; at $60: -102.8 +/- 3.6 paired over 120 episodes, p < 0.0001
+      learned efficacy [0.937 0.831 0.822 0.725 0.613]
+      true nominal     [0.99 0.93 0.86 0.78 0.69]
+  PASS  the learned efficacy estimates at least rank the fleet correctly: Spearman rho = 1.00 against true nominal efficacy
+
+[4] Does performance degrade gracefully as the fleet wears out?
+      wear x1   -> $27,475/MWp/yr
+      wear x3   -> $27,357/MWp/yr
+      wear x10  -> $26,911/MWp/yr
+      wear x30  -> $26,667/MWp/yr
+  PASS  a 30x faster-wearing fleet degrades gracefully, not catastrophically: $808 lost at 30x wear (2.94%)
+
+[5] PPO on the fleet environment (5 seeds x 1,200,000 steps)
+      seed 0: $27,592, 8.3 cleans
+      seed 1: $26,370, 2.3 cleans
+      seed 2: $27,081, 23.3 cleans
+      seed 3: $27,525, 7.0 cleans
+      seed 4: $27,096, 4.3 cleans
+
+      PPO        $27,133 +/- 488
+      best rule  $27,589
+  FAIL  PPO beats the best hand-built fleet rule [scrutiny]: $27,133 vs $27,589 (-456)
+
+      figure written to figures\m6_fleet.png
+
+==============================================================
+M6 declared criteria: FAILED -- efficacy-aware dispatch beats simply using the best available machine
+M6 scrutiny checks:   FAILED -- PPO beats the best hand-built fleet rule
+==============================================================

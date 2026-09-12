@@ -1,0 +1,24 @@
+
+M1 ACCEPTANCE -- physics core, 2016-2025
+
+[1] Clean-plant energy yield
+  PASS  irradiance components close (GHI = DHI + DNI*cos z): median relative error +0.00000
+  PASS  annual specific yield in the published band (1700-1900 kWh/kWp): min 1703, max 1802, mean 1741 over 10 years
+  PASS  mean yield within 10% of Global Solar Atlas PVOUT: 1741 vs Solargis 1792 (2.8% low)
+
+[2] Soiling accumulation vs DEWA's measured rates
+  PASS  Kimber: mean accumulation in DEWA band (0.14-0.33 %/day): 0.235 %/day (p5 0.235, p95 0.235)
+  PASS  Kimber: soiling ratio stays physical (0 < ratio <= 1): min 0.7000, max 1.0000
+  PASS  AOD-modulated: mean accumulation in DEWA band (0.14-0.33 %/day): 0.224 %/day (p5 0.140, p95 0.330)
+  PASS  AOD-modulated: soiling ratio stays physical (0 < ratio <= 1): min 0.7000, max 1.0000
+
+[3] Soiling reduces energy, and the two models agree
+  PASS  Kimber: never-clean plant loses energy vs clean: 17.55% lifetime energy lost to soiling
+  PASS  AOD-modulated: never-clean plant loses energy vs clean: 17.27% lifetime energy lost to soiling
+  PASS  the two soiling models agree within 2% of clean yield: Kimber 14353 vs AOD 14401 kWh/kWp (0.28% apart)
+
+      figure written to figures\m1_physics.png
+
+==============================================================
+M1 PASSED -- 10/10 checks
+==============================================================

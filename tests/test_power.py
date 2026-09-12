@@ -228,10 +228,16 @@ class TestLiveApi:
         assert self._raw(full, "20200101", "20201231").status_code == 200  # 9 x 1
 
     def test_daily_rainfall_matches_the_power_daily_product(self, tmp_path):
-        """Hourly PRECTOTCORR is a mm/day rate, so it must be averaged.
+        """A FRESH fetch, summarised, must reproduce POWER's daily product.
 
-        POWER's own daily product is the ground truth. If daily_summary ever
-        goes back to summing, this diverges by a factor of 24.
+        This is the check that catches an upstream units change. It was
+        previously run against the project's cached 2020 -- which is fixed in
+        canonical units by construction -- and so stayed green on 2026-09-11
+        while a fresh clone would have computed 7.1 mm/yr instead of 171.4:
+        the hourly endpoint had switched from a mm/day rate to a per-hour
+        depth. Fetching into a temporary cache exercises the live endpoint and
+        the units normalisation together; an upstream fault surfaces as a
+        PowerFetchError here, which is the correct thing to see.
         """
         response = power.requests.get(
             "https://power.larc.nasa.gov/api/temporal/daily/point",
@@ -252,16 +258,17 @@ class TestLiveApi:
         ).replace(power.FILL_VALUE, float("nan"))
         assert reference.sum() > 0, "the daily product itself looks unusable"
 
-        # Checked against the project's cached data rather than a fresh fetch.
-        # The hourly endpoint has been observed serving this one parameter as
-        # roughly -99,000 while the daily product stayed correct, and a test
-        # that fails on an upstream fault teaches nothing. TestFillValues covers
-        # our handling of that fault directly.
-        ours = power.daily_summary(power.fetch_year(2020))["PRECTOTCORR"]
+        fresh = power.fetch_year(2020, cache_dir=tmp_path)
+        ours = power.daily_summary(fresh)["PRECTOTCORR"]
 
         # Compared as annual totals; the UTC->local shift moves a few hours
         # across day boundaries, so daily rows will not match exactly.
         assert ours.sum() == pytest.approx(reference.sum(), rel=0.02)
+
+        # And the cached form must agree with the project's canonical cache
+        # for the same year, whatever units the endpoint served today.
+        canonical = power.daily_summary(power.fetch_year(2020))["PRECTOTCORR"]
+        assert ours.sum() == pytest.approx(canonical.sum(), rel=0.02)
 
 
 class TestFillValues:
@@ -334,3 +341,161 @@ class TestFillValues:
                 cache_dir=tmp_path,
             )
         assert not list(tmp_path.glob("*.parquet")), "a bad fetch was cached"
+
+
+class TestRainfallUnits:
+    """Guarding the units of hourly PRECTOTCORR against the endpoint.
+
+    Observed 2026-09-11: between 2026-08-29 and 2026-09-11 the hourly endpoint
+    switched PRECTOTCORR from a mm/day rate to a per-hour depth while every
+    other parameter stayed byte-identical. The code averaged it, correctly for
+    the August form and 24x too low for the September one -- a fresh clone
+    would have computed 7.1 mm/yr for 2020 against the daily product's 171.4.
+    Every fetch now classifies the served form against the daily product and
+    converts to the canonical mm/day rate before caching.
+    """
+
+    HOURS = 48  # two UTC days
+
+    @classmethod
+    def _hourly_payload(cls, rain_value: float) -> dict:
+        stamps = pd.date_range("2020-01-01", periods=cls.HOURS, freq="h")
+        keys = [t.strftime("%Y%m%d%H") for t in stamps]
+        return {
+            "properties": {
+                "parameter": {
+                    "PRECTOTCORR": {k: rain_value for k in keys},
+                    "ALLSKY_SFC_SW_DWN": {k: 500.0 for k in keys},
+                }
+            }
+        }
+
+    @staticmethod
+    def _daily_payload(daily_mm: float, days: int = 2) -> dict:
+        keys = [f"202001{d:02d}" for d in range(1, days + 1)]
+        return {"properties": {"parameter": {"PRECTOTCORR": {k: daily_mm for k in keys}}}}
+
+    @classmethod
+    def _serve(cls, monkeypatch, hourly_rain: float, daily_mm: float, calls: dict):
+        """Dispatch on URL: the hourly endpoint and the daily units reference."""
+
+        def fake_get(url, *args, **kwargs):
+            calls[url] = calls.get(url, 0) + 1
+            requested = kwargs["params"]["parameters"].split(",")
+
+            class Response:
+                ok = True
+                status_code = 200
+
+                @staticmethod
+                def json():
+                    if url == power.POWER_DAILY_URL:
+                        return cls._daily_payload(daily_mm)
+                    payload = cls._hourly_payload(hourly_rain)
+                    # Like the real endpoint: only the requested parameters.
+                    payload["properties"]["parameter"] = {
+                        k: v
+                        for k, v in payload["properties"]["parameter"].items()
+                        if k in requested
+                    }
+                    return payload
+
+            return Response()
+
+        monkeypatch.setattr(power.requests, "get", fake_get)
+
+    PARAMS = ("PRECTOTCORR", "ALLSKY_SFC_SW_DWN")
+
+    def test_rate_form_is_stored_unchanged(self, tmp_path, monkeypatch):
+        """Hourly 2.4 mm/day-rate for 48 h sums to 115.2; daily 2 x 2.4 = 4.8.
+        Ratio 24: already canonical."""
+        calls: dict = {}
+        self._serve(monkeypatch, hourly_rain=2.4, daily_mm=2.4, calls=calls)
+        frame = power.fetch_year(2020, parameters=self.PARAMS, cache_dir=tmp_path)
+        assert (frame["PRECTOTCORR"] == 2.4).all()
+        assert calls[power.POWER_DAILY_URL] == 1
+
+    def test_depth_form_is_converted_to_rate(self, tmp_path, monkeypatch):
+        """Hourly 0.1 mm/h for 48 h sums to 4.8; daily 2 x 2.4 = 4.8. Ratio 1:
+        a per-hour depth, converted x24 to the canonical rate."""
+        self._serve(monkeypatch, hourly_rain=0.1, daily_mm=2.4, calls={})
+        frame = power.fetch_year(2020, parameters=self.PARAMS, cache_dir=tmp_path)
+        assert frame["PRECTOTCORR"].to_numpy() == pytest.approx(2.4)
+        # daily_summary averages: a whole day of 2.4 mm/day-rate is 2.4 mm.
+        daily = power.daily_summary(frame, complete_days_only=False)
+        assert daily["PRECTOTCORR"].iloc[0] == pytest.approx(2.4)
+
+    def test_converted_form_is_what_gets_cached(self, tmp_path, monkeypatch):
+        """The cache holds canonical units, so an offline replay needs no
+        reference and cannot depend on what the endpoint served that day."""
+        self._serve(monkeypatch, hourly_rain=0.1, daily_mm=2.4, calls={})
+        power.fetch_year(2020, parameters=self.PARAMS, cache_dir=tmp_path)
+
+        def explode(*args, **kwargs):  # pragma: no cover - must not run
+            raise AssertionError("network was used despite a warm cache")
+
+        monkeypatch.setattr(power.requests, "get", explode)
+        cached = power.fetch_year(2020, parameters=self.PARAMS, cache_dir=tmp_path)
+        assert cached["PRECTOTCORR"].to_numpy() == pytest.approx(2.4)
+
+    def test_unclassifiable_units_are_refused(self, tmp_path, monkeypatch):
+        """Hourly 1.0 for 48 h sums to 48; daily 4.8. Ratio 10 is neither form."""
+        self._serve(monkeypatch, hourly_rain=1.0, daily_mm=2.4, calls={})
+        with pytest.raises(power.PowerFetchError, match="units"):
+            power.fetch_year(2020, parameters=self.PARAMS, cache_dir=tmp_path)
+        assert not list(tmp_path.glob("*.parquet")), "an unclassified fetch was cached"
+
+    def test_a_dry_reference_is_refused(self, tmp_path, monkeypatch):
+        self._serve(monkeypatch, hourly_rain=0.0, daily_mm=0.0, calls={})
+        with pytest.raises(power.PowerFetchError, match="no rainfall"):
+            power.fetch_year(2020, parameters=self.PARAMS, cache_dir=tmp_path)
+
+    def test_no_reference_request_without_rainfall(self, tmp_path, monkeypatch):
+        """Fetches that do not ask for PRECTOTCORR must not hit the daily endpoint."""
+        calls: dict = {}
+        self._serve(monkeypatch, hourly_rain=2.4, daily_mm=2.4, calls=calls)
+        power.fetch_year(2020, parameters=("ALLSKY_SFC_SW_DWN",), cache_dir=tmp_path)
+        assert power.POWER_DAILY_URL not in calls
+
+    def test_factor_classification_boundaries(self):
+        assert power._rain_units_factor(24.0 * 100, 100, 2020) == 1.0
+        assert power._rain_units_factor(1.0 * 100, 100, 2020) == 24.0
+        # 0.7% rounding loss on the depth form, measured 2026-09-11, is inside tolerance
+        assert power._rain_units_factor(0.993 * 100, 100, 2020) == 24.0
+        with pytest.raises(power.PowerFetchError):
+            power._rain_units_factor(10.0 * 100, 100, 2020)
+
+
+class TestCachedFilesAreValidated:
+    """A cached file must not bypass the physical-bounds guard.
+
+    Observed 2026-09-11: the lead-in year 2015 had been cached with
+    PRECTOTCORR at -99,000 for every hour, nine minutes before the guard was
+    committed, and was read back unchecked -- 1 January 2016 entered the
+    training environment with -16,498 mm/day of rain.
+    """
+
+    def _write_cache(self, tmp_path, rain_value: float) -> None:
+        stamps = pd.date_range("2020-01-01", periods=48, freq="h", tz="UTC")
+        frame = pd.DataFrame(
+            {"PRECTOTCORR": rain_value, "ALLSKY_SFC_SW_DWN": 500.0}, index=stamps
+        )
+        frame.index.name = "timestamp_utc"
+        path = power._cache_path(MBR_SOLAR_PARK, 2020, tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_parquet(path)
+
+    def test_corrupt_cache_is_refused_and_named(self, tmp_path, monkeypatch):
+        self._write_cache(tmp_path, -99000.0)
+
+        def explode(*args, **kwargs):  # pragma: no cover - must not run
+            raise AssertionError("a corrupt cache must be refused, not refetched silently")
+
+        monkeypatch.setattr(power.requests, "get", explode)
+        with pytest.raises(power.PowerFetchError, match="cached file"):
+            power.fetch_year(2020, cache_dir=tmp_path)
+
+    def test_healthy_cache_is_served(self, tmp_path):
+        self._write_cache(tmp_path, 1.5)
+        frame = power.fetch_year(2020, cache_dir=tmp_path)
+        assert (frame["PRECTOTCORR"] == 1.5).all()

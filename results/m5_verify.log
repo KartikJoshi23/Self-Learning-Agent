@@ -1,0 +1,53 @@
+
+M5 ACCEPTANCE -- partial observability
+
+[1] Belief accuracy against the true latent soiling
+  PASS  the Kalman belief is substantially more accurate than the raw reading: RMSE 0.00149 vs raw 0.02626 (17.7x reduction)
+  PASS  the belief is unbiased: mean error -0.00052
+
+[2] Does partial observability break the M4-winning rule?
+      exact-observability threshold-0.93 (the M4 winner): $27,677
+ noise    naive  naive_cleans  guarded   belief  blind_fixed
+   0.0 27,642.2          10.0 27,642.2 27,667.0     27,526.1
+   0.0 27,207.1          21.7 27,326.2 27,656.0     27,526.1
+   0.1 25,126.8          59.5 26,634.7 27,654.1     27,526.1
+   0.1 22,905.7          97.8 26,338.3 27,655.5     27,526.1
+      (120 episodes per cell)
+  PASS  the naive threshold degrades badly as noise rises: $22,906 at noise 0.10 vs $27,677 exact (-$4,771)
+  PASS  it degrades by over-cleaning, not under-cleaning: 10.0 -> 97.8 cleans/yr
+  PASS  beyond some noise a BLIND fixed interval beats the sensor-driven rule: first at noise 0.03
+
+[3] Does belief tracking recover the loss?
+  PASS  the belief policy stays within 0.5% of exact observability at every noise level: worst gap $23 (0.08%)
+  PASS  the belief-vs-naive gap widens as noise rises: gap $25 -> $449 -> $2,527 -> $4,750 across noise 0.01 -> 0.03 -> 0.06 -> 0.10
+  PASS  filtering beats the cheap guard, so the filter earns its place: belief exceeds guarded by $25-$1,317
+
+[4] PPO at noise 0.03: memoryless vs belief-state (5 seeds x 800,000 steps)
+      memoryless    seed 0: $27,533, 6.7 cleans
+      memoryless    seed 1: $27,517, 6.3 cleans
+      memoryless    seed 2: $27,561, 6.3 cleans
+      memoryless    seed 3: $27,512, 6.0 cleans
+      memoryless    seed 4: $27,461, 5.7 cleans
+      belief-state  seed 0: $27,537, 6.0 cleans
+      belief-state  seed 1: $27,557, 6.7 cleans
+      belief-state  seed 2: $27,571, 6.7 cleans
+      belief-state  seed 3: $27,528, 6.0 cleans
+      belief-state  seed 4: $27,536, 5.7 cleans
+
+                  mean  std
+agent                     
+belief-state 27,545.8 17.7
+memoryless   27,516.9 36.6
+  FAIL  the belief-state agent significantly beats the memoryless agent: $27,546 vs $27,517 (+29); Welch t=1.59, p=0.165, n=5 per arm
+  FAIL  the best learned agent beats the hand-built Kalman+threshold rule [scrutiny]: PPO belief-state $27,546 vs rule $27,656 (-110)
+
+      figure written to figures\m5_partial_observability.png
+
+==============================================================
+M5 declared criteria: FAILED -- the belief-state agent significantly beats the memoryless agent
+M5 scrutiny checks:   FAILED -- the best learned agent beats the hand-built Kalman+threshold rule
+
+  No learned agent beats the hand-built Kalman+threshold rule.
+  Reported, not buried: on this problem the hard part is state
+  estimation, not control.
+==============================================================

@@ -1,0 +1,46 @@
+
+M3 ACCEPTANCE -- baselines, metrics, and the falsification gate
+
+      train years (2016, 2017, 2018, 2019, 2020, 2021, 2022)
+      held-out    (2023, 2024, 2025)
+
+[1] Falsification gate: can the simulator reproduce a 28-34 day optimum?
+      plausible cost range declared in advance: $25-$150/MWp/pass
+
+       cost $/MWp  optimum d  analytic d   net $/MWp/yr
+               25         18        16.1         28,825
+               50         25        22.8         28,443
+               60         31        25.0         28,326
+               75         34        28.0         28,171
+              100         37        32.3         27,939
+              125         46        36.1         27,743
+              150         46        39.6         27,568
+  PASS  a plausible cleaning cost reproduces the published 28-34 day optimum: reproduced at $60, $75/MWp
+  PASS  swept optimum tracks the independent closed form within 35%: mean relative gap 17.8% across 7 costs
+
+[2] Shape of the cost curve
+  PASS  net value is unimodal in the cleaning interval: optimum 31 d is interior to the swept range 10-100 d
+  PASS  the 1%-of-optimum plateau is reported, not hidden: any interval in 16-57 d is within 1% of optimal - the optimum is genuinely flat
+
+[3] Baseline comparison on HELD-OUT years (never trained on)
+        policy  mean_net_usd  std_net_usd  worst_net_usd  cvar5_net_usd  mean_cleans  soiling_loss_pct  n_years  n_episodes
+threshold-0.93      27,677.0        276.3       27,373.1       27,373.1          8.3               2.5        3           3
+threshold-0.95      27,626.3        234.5       27,361.6       27,361.6         12.3               1.9        3           3
+threshold-0.92      27,596.7        295.2       27,262.8       27,262.8          7.7               2.9        3           3
+     fixed-34d      27,511.4        180.7       27,308.5       27,308.5         10.0               2.8        3           3
+     fixed-28d      27,454.8        121.2       27,315.3       27,315.3         13.0               2.3        3           3
+threshold-0.97      27,276.4        314.5       26,922.5       26,922.5         22.0               1.1        3           3
+   never-clean      24,636.5      2,352.1       22,355.7       22,355.7          0.0              14.8        3           3
+  always-clean       6,987.1         73.7        6,904.5        6,904.5        365.3               0.0        3           3
+  PASS  the best baseline beats never-cleaning: threshold-0.93 $27,677 vs never-clean $24,637 (+$3,040)
+  PASS  always-cleaning is uneconomic: $6,987 vs never-clean $24,637
+  PASS  CVaR is computed for every baseline: worst-case CVaR@5% ranges $6,905 to $27,373 (n=3 years - a crude tail estimate, stated as such)
+
+      figure written to figures\m3_baselines.png
+
+==============================================================
+M3 PASSED -- 7/7 checks
+==============================================================
+
+M4 target to beat (held-out years):
+  threshold-0.93  $27,677/MWp/yr  CVaR@5% $27,373

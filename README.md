@@ -4,7 +4,7 @@
 
 A reinforcement-learning benchmark for **photovoltaic soiling and cleaning dispatch in desert conditions**, calibrated to Dubai's Mohammed bin Rashid Al Maktoum Solar Park.
 
-> **Status: complete.** Eight milestones, M0–M7. 183 tests.
+> **Status: complete.** Eight milestones, M0–M7. 194 tests. Every headline number traces to a log in `results/`.
 > **[▶ Run the live simulator](https://claude.ai/code/artifact/7911f3e9-7cc6-4dcc-af5d-c6d7b1a16c21)** · **[Read the findings →](FINDINGS.md)**
 
 ### Try it in 30 seconds
@@ -12,8 +12,11 @@ A reinforcement-learning benchmark for **photovoltaic soiling and cleaning dispa
 The simulator runs the real physics **live in your browser** on ten years of measured
 Dubai weather — no install, no server. Pick a policy, drag the sensor-noise slider, and
 watch a naive cleaning rule chatter itself into collapse while the Kalman filter holds
-flat. Its numbers reproduce the Python engine to **0.02% on energy** and match cleaning
-counts exactly (`web/simulator.html`, verified against `rimal/` in `node`).
+flat. It is a port, not a mock-up, and the port is checked against the engine on every
+test run: `scripts/verify_simulator.py` runs the physics out of the *shipped* HTML under
+`node` and matches `rimal/` on soiling to **7e-5**, soiled energy to **0.017%**, and the
+exact cleaning days of three decision rules; `scripts/export_sim_data.py --check` proves
+the shipped data is what the engine produces today.
 
 ---
 
@@ -25,15 +28,15 @@ We built a simulator calibrated to DEWA's own published field measurements, repr
 
 > **The hard part of PV cleaning is state estimation, not control.** Once you know how
 > dirty the panels are, the control law is a threshold. The largest effect anything here
-> produced was a **17.6× reduction in soiling-estimate error** — from a Kalman filter,
+> produced was a **17.7× reduction in soiling-estimate error** — from a Kalman filter,
 > not a neural network.
 
 | # | Hypothesis | Result |
 |---|---|---|
-| **M4** | a learned policy beats a fixed schedule | PPO beat every fixed interval (+$135), **lost to a tuned threshold** by $16 |
-| **M5** | latent soiling breaks a threshold rule | Partial observability is devastating (**−$4,763**, 17.2%) — a Kalman filter fixes it; PPO still lost |
-| **M6** | stochastic cleaning and actuator wear | Real but small ($190/yr); learning *which* robot to use lost everywhere |
-| **M7** | fat-tailed storm risk | A real risk/return frontier exists — QR-DQN **lost** by $163, and its risk dial did nothing |
+| **M4** | a learned policy beats a fixed schedule | PPO beat every fixed interval (+$131), **lost to a tuned threshold** by $20 |
+| **M5** | latent soiling breaks a threshold rule | Partial observability is devastating (**−$4,771**, 17.2%) — a Kalman filter fixes it; PPO still lost, with or without the belief state |
+| **M6** | stochastic cleaning and actuator wear | Real but small ($181/yr); learning *which* robot to use lost everywhere |
+| **M7** | fat-tailed storm risk | A real risk/return frontier exists — QR-DQN **lost** on CVaR by $501, and its risk dial did nothing |
 
 ### The finding that transfers
 
@@ -56,17 +59,17 @@ pytest -q
 Every milestone has an acceptance script that **declares its criteria before the milestone is built** and prints pass/fail per check:
 
 ```bash
-python scripts/m0_verify.py    # data layer          11/11
+python scripts/m0_verify.py    # data layer          13/13
 python scripts/m1_verify.py    # physics             10/10
 python scripts/m2_verify.py    # Gymnasium env       10/10
 python scripts/m3_verify.py    # falsification gate   7/7
 python scripts/m4_verify.py    # PPO                  5/5   (~1 h, trains 5 seeds)
-python scripts/m5_verify.py    # partial observability
+python scripts/m5_verify.py --seeds 5   # partial observability (5 seeds = the published protocol)
 python scripts/m6_verify.py    # fleet + actuator wear
 python scripts/m7_verify.py    # risk sensitivity + water CMDP
 ```
 
-Checks are labelled `declared` (approved in the plan) versus `scrutiny` (harder bars we set ourselves). **A failing scrutiny check still turns the run red** — M6 and M7 both end red, and that is the honest result rather than a bug.
+Checks are labelled `declared` (approved in the plan) versus `scrutiny` (harder bars we set ourselves). **A failing check turns the run red, scrutiny or declared** — M5, M6 and M7 all end red, and that is the honest result rather than a bug.
 
 ## What's in here
 
@@ -78,14 +81,15 @@ Checks are labelled `declared` (approved in the plan) versus `scrutiny` (harder 
 | `rimal/baselines` | fixed-interval, threshold, belief-threshold, fleet heuristics |
 | `rimal/agents` | PPO (CleanRL style) and QR-DQN with CVaR action selection |
 | `rimal/eval` | episode runner, CVaR, policy comparison, analytic optimum |
-| `scripts/` | one acceptance script per milestone |
+| `scripts/` | one acceptance script per milestone, plus the simulator export and its verification harness |
+| `results/` | the observed output of every acceptance script, as last run |
 | `web/` | the browser simulator: `simulator.html` (self-contained), its template and exported data |
 
 The environment is a low-dimensional stochastic simulator — thousands of steps per second on CPU. **No GPU. Zero cost.** All data is free and redistributable: [NASA POWER](https://power.larc.nasa.gov/) supplies irradiance, weather *and* aerosol optical depth with no registration.
 
 ## Honesty notes
 
-[FINDINGS.md](FINDINGS.md) documents **six defects found in our own work**, each of which changed a result — a 24× rainfall unit error, a clipped soiling tail, a self-inflicted train/eval mismatch, an under-tuned baseline, an unfair comparison protocol, and a headline figure computed from three episodes. Two acceptance checks passed for the wrong reasons and were tightened; one then correctly failed.
+[FINDINGS.md](FINDINGS.md) documents **seven defects found in our own work**, each of which changed a result — a 24× rainfall unit error, a clipped soiling tail, a self-inflicted train/eval mismatch, an under-tuned baseline, an unfair comparison protocol, a headline figure computed from three episodes, and a held-out year one day short — plus two faults in the data source that were caught before they reached a result: the upstream provider changed the units of hourly rainfall between two sessions, and a cached year arrived corrupted. Two acceptance checks passed for the wrong reasons and were tightened; one then correctly failed.
 
 For a negative result, that record *is* the credibility argument.
 

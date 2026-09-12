@@ -4,7 +4,7 @@
 > Resume instructions live in [HANDOFF.md](HANDOFF.md).
 > The binding methodology lives in [Problem-Solving-Skill.md](Problem-Solving-Skill.md).
 
-**Last updated:** 2026-08-29 · by **Master** (Kartu)
+**Last updated:** 2026-09-12 · by **Master** (Kartu)
 **Repository:** https://github.com/KartikJoshi23/Self-Learning-Agent
 
 ---
@@ -13,11 +13,11 @@
 
 | Field | Value |
 |---|---|
-| **Current phase** | **Phase 4 — Development (Tier 1: M0–M4)** |
-| **Phase state** | **Tier 1 (M0–M4) and Tier 2 (M5–M7) complete.** All acceptance scripts m0–m7 run and recorded. Conclusion in [FINDINGS.md](FINDINGS.md), published at https://claude.ai/code/artifact/6c6caf05-fc2b-4dcf-840f-d78089c025ee. **Awaiting Master's decision on Tier 3** — see below. |
+| **Current phase** | **Phase 4 — Development, post-completion.** Tiers 1 and 2 (M0–M7) complete; Tier 3 not yet scoped. |
+| **Phase state** | **Master review of the collaborator's M6–M7 / audit / simulator work completed 2026-09-12.** Two data-layer faults found and fixed (an upstream rainfall units change, a corrupted lead-in year), every acceptance script re-run on the corrected environment, and the published numbers re-baselined from those runs — logs in `results/`. Conclusion in [FINDINGS.md](FINDINGS.md). **Awaiting Master's decision on Tier 3** — see below. |
 | **Blocked on** | Nothing. |
-| **Next action** | **Master decision.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery. |
-| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **176 passing tests**, `scripts/` verify m0–m7, `FINDINGS.md`, `README.md`. |
+| **Next action** | **Master decision on Tier 3 scope.** All eight milestones are done and the conclusion is written. Tier 3 as originally planned (continual learning, offline RL, benchmark release) assumed an agent worth deploying; the finding is that a Kalman filter plus a threshold wins. Recommended Tier 3 is therefore **publication of the benchmark and the negative result**, not more agent machinery — see "Next up". |
+| **Code written so far** | `rimal/{config,data,physics,env,baselines,eval,agents}`, **194 passing tests**, `scripts/` verify m0–m7 + simulator export/verify, `results/` acceptance logs, `web/` browser simulator, `FINDINGS.md`, `README.md`. |
 
 ---
 
@@ -210,6 +210,10 @@ fixed-interval alone would have set**.
   ($2.50) was drowned by a constant ($80); and **missing observation normalisation** —
   the actual cause, since soiling ratio arrives in [0.70, 1.00].
 
+**Re-run 2026-09-11 on the corrected environment** (`results/m4_verify.log`): **PASSED 5/5.**
+PPO **$27,657 ± 32** vs tuned threshold **$27,677 (−$20)**; +$131 over the best fixed
+interval; 8.4 cleans/yr, every seed beats never-clean. Same conclusion as both earlier runs.
+
 ### Phase 4 / M5 — Partial observability (complete, verified 2026-08-29)
 - `rimal/env/observation.py` — heteroscedastic noise model + Kalman filter;
   `BeliefThreshold`, `ScheduleAwareThreshold`, `BeliefStateWrapper`.
@@ -228,7 +232,7 @@ The naive rule loses **$5,418 (19.6%)** by *chatter*, not neglect. **From 3% noi
 blind fixed interval beats the sensor-driven rule.** The belief policy is nearly immune:
 $19 spread across 1–10% noise.
 
-**Belief RMSE 0.0262 → 0.00149 (17.6× reduction)** after fixing two filter bugs: it
+**Belief RMSE 0.0262 → 0.00149 (17.6× reduction; 17.7× on the 2026-09-11 re-run)** after fixing two filter bugs: it
 ignored the 14-day rain grace period (drift up to 0.033 — the same order as the noise it
 was removing), and it had an off-by-one on rain (env applies a day's rain to the
 *following* day).
@@ -239,6 +243,25 @@ a PASS on +$43 at n=3, p=0.194. The check now requires significance.)*
 
 **⚠️ The scrutiny check that failed:** neither learned agent beats the hand-built rule —
 PPO belief-state $27,565 vs `BeliefThreshold` $27,638 (−$74).
+
+**Re-run 2026-09-11 on the corrected environment** (`results/m5_verify.log`, 5 seeds):
+**declared 8/9 — criterion (b) FAILED; scrutiny FAILED.** Everything about the rule
+reproduced: belief RMSE 0.00149 vs raw 0.02626 (**17.7×**), naive collapse **−$4,771
+(17.2%)** at 10% noise with **97.8 cleans/yr**, blind fixed-31d ($27,526) beats the naive rule
+from 3% noise, the belief policy within **$23** of exact observability at every level. **But
+the PPO comparison did not replicate:** belief-state **$27,546 ± 18** vs memoryless
+**$27,517 ± 37**, **+$29, Welch t = 1.59, p = 0.165** — where the published run had +$64 at
+p = 0.030. The earlier significance was fragile at n = 5 and is now recorded as **not
+established**. Nothing about the cross-milestone conclusion changes; if anything it sharpens
+(a Kalman filter helps a rule enormously and a neural policy barely at all). Scrutiny:
+PPO belief-state $27,546 vs `BeliefThreshold` $27,656 (−$110).
+
+**Deviation from the approved plan (recorded 2026-09-11 by Master):** the plan's D3 named
+*recurrent PPO* for the POMDP. M5 used a **belief-state wrapper** (Kalman estimate fed to a
+memoryless PPO) instead of an LSTM policy; the reasoning is in
+`rimal/env/belief_wrapper.py`'s docstring (an explicit filter is inspectable and its RMSE is
+measurable, which a hidden LSTM state is not). The plan's criterion (b) was tested with the
+belief-state agent as the "recurrent/belief agent". No recurrent policy was trained.
 
 ---
 
@@ -266,12 +289,36 @@ declared**, and the 17.6× belief-RMSE headline reproduces exactly. Tests 133 �
 
 ---
 
+## Master review (2026-09-11)
+
+Phase 5 of the methodology applied to everything committed since `55a5488` (M6, M7, the
+audit, the simulator, the handoff rewrite). `pytest` was green and m0–m3 passed on arrival;
+the faults below were found by **probing the live data source** and by **reading the cache
+the code trusts**, neither of which the suite does.
+
+| # | Finding | Status |
+|---|---|---|
+| R1 | **NASA POWER changed the units of hourly `PRECTOTCORR`** between 2026-08-29 and 2026-09-11 — from a mm/day *rate* to a per-hour *depth*, every other column byte-identical (`old == 24·new` to within the new product's 0.005 mm rounding; daily product unchanged at 171.4 mm for 2020). The code averaged it, correctly for August's form and **24× too low** for September's: a fresh clone computed **7.1 mm/yr**. Invisible on a warm cache — the physical-floor guard passes and the network test deliberately read the cache. | ✅ Every fetch now classifies its units against POWER's daily product (ratio ≈ 24 → rate, ≈ 1 → depth ×24, else refused) and caches the canonical rate. Network test fetches fresh. 9 new tests. |
+| R2 | **The 2015 lead-in year was cached corrupted** (`PRECTOTCORR = −99,000` every hour), written nine minutes before the physical-floor guard was committed and never re-validated on read. Leakage: **1 Jan 2016 rain = −16,498 mm/day** in the training environment. No published result affected (nothing was trained after 09-10), but any re-run on this machine would have been. | ✅ Cached files are cleaned and validated on every read, refused by name if bad. 2015 deleted and refetched (89 mm/yr). `_rain.min() = 0.00` on both train and held-out envs. |
+| R3 | **Published dollar figures no longer reproduced.** The collaborator's lead-in fix restored 1 Jan 2023 to the held-out set (364 → 365 days); `threshold-0.93` moved $27,651 → $27,677. The commit asserted "no conclusion changes" but M4–M7 were not re-run. | ✅ **M4–M7 re-run on the corrected environment**; every number in FINDINGS/README/PROGRESS re-baselined from the observed output; logs committed under `results/`. See the M4–M7 sections and FINDINGS.md for the figures. |
+| R4 | The simulator's "verified in node" figures were asserted; the harness was not committed, nor the export that produced `sim_data.json`. | ✅ `scripts/export_sim_data.py` rebuilds `sim_data.json` and `simulator.html` **byte-for-byte** (`--check`); `scripts/verify_simulator.py` slices the physics out of the *shipped* HTML, runs it under node and compares with the engine — **8/8**: soiling to 6.8e-5, clean energy to 3e-7, soiled energy to 0.017%, identical rain and cleaning days for naive, belief and fixed rules. Both under test. |
+| R5 | M0's declared checks could see neither fault. | ✅ Section [5] added: rainfall never negative in any cached year incl. the lead-in; mean annual rainfall in 30–1000 mm. **13/13.** Injecting the 24× bug turns it red (observed). |
+| R6 | Two plan deviations unrecorded (M5 recurrent PPO → belief wrapper; M7 Lagrangian PPO never built). Session log nine sessions short. Test count stated three different ways. | ✅ Recorded under M5/M7; session log reconstructed from git and labelled; counts reconciled. |
+
+**Verified on arrival, before any change:** `pytest` 183 passed · M0 11/11 · M1 10/10 ·
+M2 10/10 · M3 7/7. **Verified after:** see the session-log row and FINDINGS.md.
+
+**Constraints:** no conflicts. ZERO COST (NASA POWER, node, torch-CPU) and LAPTOP-ONLY
+hold; `web/sim_data.json` is 26 KB of derived held-out data, not raw data.
+
+---
+
 ## Cross-milestone finding: state estimation, not control
 
 **Four** consecutive milestones now show a model-based rule beating model-free deep RL:
 M3 (tuned threshold > every fixed interval), M4 (tuned threshold > PPO), M5
 (Kalman+threshold > both PPO variants), M6 (fleet heuristic > PPO by $581, with one seed
-in five collapsing entirely).
+in five collapsing entirely; −$456 and a near-collapse on the 2026-09-12 re-run).
 
 **M6 was the milestone designed to break the pattern, and it did not.** It asked whether
 stochastic efficacy and a degrading actuator create structure filter-plus-threshold
@@ -328,6 +375,16 @@ the honest conclusion** rather than continuing until something wins.
 −$96. *One seed in five failing to learn at all is a robustness result in its own
 right* — a policy that collapses 20% of the time is not deployable.
 
+**Re-run 2026-09-12 on the corrected environment** (`results/m6_verify.log`), with
+`m6_verify.py` strengthened to evaluate every held-out cell at **40 seeds/year (120
+episodes)** and to print the paired tests the audit had computed ad hoc: **declared 3/4
+(dispatch check FAILED, as before); scrutiny FAILED.** Partial cleaning costs **$181/yr**;
+modelling it is worth **$28–90/yr across costs, +$28.4 ± 7.9 at $60 (p = 0.0005)**;
+efficacy-aware dispatch **loses at every frequency, −$102.8 ± 3.6 at $60 (p < 0.0001)**
+with Spearman ρ = 1.00; 30× wear costs **2.94%**. PPO **$27,133 ± 488 vs rule $27,589
+(−$456)**: seed 1 near-collapsed (2.3 cleans/yr), seed 2 over-cleaned (23.3/yr) — the same
+instability as the first run, in a different seed.
+
 ---
 
 ### Phase 4 / M7 — Risk sensitivity and the water constraint (complete, verified 2026-09-05)
@@ -364,6 +421,31 @@ the max of four noisy numbers beats the reference by chance. The better-powered
 evaluation then put risk-neutral top. Replaced with a single pre-specified prediction
 (CVaR monotone in risk aversion), which the data does not support.
 
+**Deviation from the approved plan (recorded 2026-09-11 by Master):** the plan's D3 and
+M7 row named *Lagrangian PPO* for the water CMDP. **No Lagrangian agent was built.** The
+water budget was implemented as a hard constraint in the environment and evaluated with
+the rule policies (100% satisfaction at every budget, sacrifice reported as the cost of
+the tightest budget). Given that the constraint binds at negligible cost, a Lagrangian
+agent had nothing to trade off; defensible, but it is a deviation and is recorded as one.
+
+**Re-run 2026-09-12 on the corrected environment** (`results/m7_verify.log`): **declared
+FAILED, scrutiny FAILED** — as before. Clipping overstated CVaR by $391 (unchanged);
+mean-optimal 0.94 vs CVaR-optimal 0.96, **+$62 CVaR for −$55 mean**; water **100%
+satisfied at every budget, tightest costs $37/MWp/yr (0.14%)** — this settles the earlier
+$43 (PROGRESS) vs $29 (FINDINGS) discrepancy, which were two different runs. QR-DQN CVaR by
+α: $26,759 → $26,798 → $26,780 → $26,728 — **not monotone**. Like for like: rule CVaR
+**$26,890** (identical to the first run) vs agent **$26,388 at α = 0.25 (−$501)**, seed sd
+$299 at n = 3 — the agent's held-out tail is both worse and far noisier than first reported
+(−$163 at sd $54). *(The first attempt at this re-run on 2026-09-11 was killed by the laptop
+sleeping during section [5]; the run recorded here is complete.)*
+
+**Two review notes on M6/M7 code (Master, 2026-09-11), neither changing a finding:**
+`RobotSpec.cooldown_days` is documented as days unavailable after a pass, but
+`Fleet.advance_day()` runs in the same step, so a robot is unavailable for `cooldown_days − 1`
+days (values are swept assumptions; left as is). QR-DQN applies CVaR at action selection
+only — the Bellman target is risk-neutral — so finding 4 is about eval-time CVaR selection,
+not about fully risk-sensitive training; now stated in FINDINGS.md.
+
 ---
 
 ## FINAL CONCLUSION — see [FINDINGS.md](FINDINGS.md)
@@ -372,12 +454,14 @@ Four hypotheses about where adaptive control adds value; **four negative results
 RL** (M4, M5, M6, M7). No learned agent beat a well-tuned rule on any axis.
 
 **The hard part of PV cleaning is state estimation, not control.** Once soiling is known
-the control law is a threshold. The largest effect anything produced was M5's **17.6×
+the control law is a threshold. The largest effect anything produced was M5's **17.7×
 reduction in soiling-estimate error** — from a Kalman filter.
 
 The operator-facing result is strong: under a realistic noisy performance-ratio signal a
-naive threshold collapses **19.6%** and cleans **109×/yr instead of 8**; beyond 3% noise
+naive threshold collapses **17.2%** and cleans **~98×/yr instead of 8**; beyond 3% noise
 a *blind calendar* beats the sensor-driven rule. Filtering removes that trap entirely.
+*(Figures from the 2026-09-11 re-run; the 19.6% / 109× first reported came from three
+episodes per point — see the audit.)*
 
 ---
 
@@ -410,6 +494,7 @@ assumed an agent worth deploying. It is not the right Tier 3 for the result we g
 | 6 | ~~Approve Tiers 2–3?~~ | Master session | ✅ **Tier 2 approved** 2026-08-29; Tier 3 still open |
 | 7 | ~~Re-run `scripts/m4_verify.py` for the archival record.~~ | Master session | ✅ Done 2026-09-05: **M4 PASSED 5/5**, PPO $27,635 ± 10 vs tuned threshold $27,651 (−$16). Same conclusion as before, tighter seeds. |
 | 5 | ~~Authorise the initial push?~~ | Master session | ✅ Authorised and pushed 2026-08-29 |
+| 8 | **Are the two claude.ai artifact links public?** README's headline "▶ Run the live simulator" and the FINDINGS link point to claude.ai artifacts, which are private by default. If not explicitly shared, the public repo's front door links to pages a stranger cannot open. Cannot be verified from a session; check in a browser while signed out. `web/simulator.html` is self-contained and could be linked directly instead. | Master session 2026-09-11 | ⏳ Open |
 
 ---
 
@@ -419,6 +504,8 @@ assumed an agent worth deploying. It is not the right Tier 3 for the result we g
 |---|---|---|---|
 | 1 | ~~No git repository initialised.~~ | — | ✅ Resolved 2026-08-29: repo initialised, remote wired to https://github.com/KartikJoshi23/Self-Learning-Agent |
 | 2 | ~~Initial push not performed.~~ | — | ✅ Resolved 2026-08-29: `origin/main` exists; collaborator handoff is live. |
+| 3 | ~~NASA POWER hourly `PRECTOTCORR` served in different units from the cached data.~~ | A fresh clone computed rainfall 24× too low and every soiling result on top of it silently wrong. | ✅ Resolved 2026-09-11: units classified against the daily product on every fetch; canonical form cached. Live endpoint healthy on 2026-09-11 (the −99,000 fault of 09-10 had cleared). |
+| 4 | ~~Lead-in year 2015 cached corrupted on the Master laptop.~~ | Poisoned 1 Jan 2016 for any training run on this machine. | ✅ Resolved 2026-09-11: refetched; cache validated on read from now on. |
 
 ---
 
@@ -430,7 +517,8 @@ believed true but were **not** confirmed against the primary source:
 | Claim | Why unverified | How to close |
 |---|---|---|
 | ~~Exact formulation of arXiv:2603.07518~~ **CLOSED 2026-08-29** — paper read in full; formulation recorded in `rimal/env/cleaning_env.py`. All four differentiation axes confirmed unclaimed. | — | Closed. |
-| *(superseded)* Exact state / action / reward formulation of arXiv:2603.07518 (Heungjo An, *RL-based dynamic cleaning scheduling framework for solar energy system*), and whether it treats soiling as latent. | Abstract confirmed via arXiv, but the abstract does not state the formulation. Full PDF not yet read. | **Read the PDF before milestone M2 freezes the environment design.** This determines which of the four differentiation axes are genuinely unclaimed. |
+| ~~The browser simulator "matches the Python engine to 0.02% on energy and reproduces cleaning counts exactly".~~ **CLOSED 2026-09-11** — the harness now lives in `scripts/verify_simulator.py` and is under test: soiling 6.8e-5, clean energy 3e-7, soiled energy 1.7e-4 relative, identical cleaning days for three rules. | — | Closed. |
+| The lead-in fix "changes no comparison or conclusion" (commit `5c31785`). | Asserted from the size of the change (0.09%), not observed — M4–M7 were not re-run. | **CLOSED 2026-09-11** by re-running M4–M7; conclusions unchanged, figures re-baselined (see FINDINGS.md). |
 | `max_soiling = 0.3` (the 30% cap on accumulated loss) is pvlib's Kimber default, not a DEWA-calibrated value. The never-cleaned baseline spends long stretches pinned at this cap, so it carries real weight in that baseline. | Not site-calibrated; no published MBR figure found. | Low risk for M3/M4 because a cleaning agent rarely reaches the cap. Revisit if the never-clean baseline turns out to matter to a conclusion. |
 | DEWA Autonomous Soiling Detector specifics. | dewa.gov.ae returns HTTP 403 to automated fetch; details taken from the UAE Media Office mirror. | Read the DEWA press release directly in a browser. Low impact — not load-bearing for the design. |
 
@@ -455,8 +543,10 @@ Eight errors were found in the original Phase 2 presentation and corrected. Full
 | `HANDOFF.md` | Collaboration and sync rules. |
 | `RESEARCH.md` | Approved Phase 2 concept + evidence base + audit log. |
 | `IMPLEMENTATION-PLAN.md` | Phase 3 plan: design decisions, milestones M0–M10, verification strategy. |
+| `FINDINGS.md` | The project conclusion — every headline number, with the run it came from. |
 | `README.md` | Public front door; current verified results. |
-| `scripts/m0_verify.py` | The M0 acceptance check. Re-run it if the data layer changes. |
+| `scripts/m0_verify.py` | The M0 acceptance check. Re-run it if the data layer changes. Its section [5] is the rainfall units/sentinel guard. |
+| `results/` | The observed output of every acceptance script, as last run. Numbers in the documents must trace to these. |
 
 ---
 
@@ -464,8 +554,19 @@ Eight errors were found in the original Phase 2 presentation and corrected. Full
 
 Newest first. Every session appends one row before stopping.
 
+> **Gap, closed 2026-09-11.** No session between 2026-09-01 and 2026-09-11 appended a row
+> here — nine sessions, Master and collaborator alike — in breach of maintenance rule 3.
+> The rows marked *(reconstructed)* were written by the Master on 2026-09-11 from the git
+> log and the commit messages, not from memory of the sessions.
+
 | Date | Machine | Who | Phase | What advanced | Commit |
 |---|---|---|---|---|---|
+| 2026-09-11 → 12 | Master laptop | Master | 4 (review) | **Reviewed all collaborator work since `55a5488` (Phase 5 applied).** Found and fixed two data-layer faults: **NASA POWER changed the units of hourly `PRECTOTCORR`** between 08-29 and 09-11 (mm/day rate → per-hour depth; a fresh clone computed 7.1 mm/yr instead of 171.4), now normalised against the daily product at fetch time; and the **2015 lead-in year was cached corrupted** (−99,000/h) and read back unchecked (1 Jan 2016 rain −16,498 mm/day) — cache files are now validated on read; 2015 refetched. M0 gained rainfall-integrity checks (13/13). **Re-ran M4–M7 on the corrected environment** and re-baselined every published number; logs committed under `results/`. **M5's declared criterion (b) did not replicate** (+$29, p = 0.165 vs the published +$64, p = 0.030) and is recorded as failed; `m6_verify.py` strengthened to 120-episode paired evaluation. Committed `scripts/export_sim_data.py` (reproduces the shipped simulator byte-for-byte) and `scripts/verify_simulator.py` (node harness: 8/8 against the engine), both under test. Recorded two unrecorded plan deviations (M5 recurrent PPO, M7 Lagrangian PPO). Tests 183 → 194. | *(this commit)* |
+| 2026-09-10 → 11 | Master laptop | Collaborator session *(reconstructed)* | 4 | Browser simulator `web/simulator.html` (JS port of the physics, verified in node but the harness was not committed); fixed three bugs it exposed — an undocumented −99,000 rainfall fill passing the parser, the first configured year losing its first local day (now one year of lead-in), and the energy table not re-trimmed with the daily frame. Tests 176 → 183. Rewrote both HANDOFF.md prompts. **Did not update PROGRESS.md.** | `5c31785`, `32f4b1a` |
+| 2026-09-09 | Master laptop | Collaborator session *(reconstructed)* | 4 | Recorded the post-completion audit in PROGRESS.md. | `c24a2a2` |
+| 2026-09-05 | Master laptop | Collaborator session *(reconstructed)* | 4 | **M7** (storm soiling, water CMDP, QR-DQN; two defects in M1's model found first — the clipped tail and the frame-relative AOD reference). M4 archival re-run (5/5). M7 declared criterion re-examined and **failed** honestly. **Audit:** circular import that broke m3_verify for three milestones; M5 headline computed from 3 episodes (re-sampled at 120); M6 re-powered; README rewritten. m5_verify crash after every check fixed; static arity guard for all scripts. Tests 110 → 176. FINDINGS.md written. | `951779a` … `6a40797` |
+| 2026-09-02 | Master laptop | Collaborator session *(reconstructed)* | 4 | **M6** (five-robot fleet, stochastic efficacy, wear, cooldown; two flaws in the model caught by ablation). PPO on the fleet env: −$581, one seed in five collapsed. Tests 92 → 110. | `5077903`, `3d10c2d` |
+| 2026-09-01 | Master laptop | Master *(reconstructed)* | 4 | M0 audit (timezone boundary bug, unjustified tolerance removed). **M1** physics (10/10; three defects fixed incl. 24× rainfall). **M2** environment (10/10; arXiv:2603.07518 read in full). **M3** baselines + **falsification gate PASSED** (7/7). **M4** PPO — null result vs tuned threshold. **M5** partial observability — Kalman belief, 17.6× RMSE reduction. Tests 14 → 92. **Did not append session-log rows.** | `9daafc5` … `55a5488` |
 | 2026-08-29 | Master laptop | Master | 3 → 4 | Tier 1 approved; pushed to GitHub (public). **Completed M0:** scaffold, venv, NASA POWER fetcher with per-year chunking + parquet cache, 14 passing tests, `scripts/m0_verify.py` **passing 10/10**. Found NASA POWER serves `AOD_55` hourly (drops CAMS, closes risk R6); corrected a wrong belief about the API span limit (it is a payload-size cap). Wrote `README.md`. | *(this commit)* |
 | 2026-08-29 | Master laptop | Master | 2 → 3 | **Audited Phase 2 research: found and corrected 8 errors (2 material).** Rewrote findings into `RESEARCH.md` with full audit log. Delivered `IMPLEMENTATION-PLAN.md` (Phase 3): design decisions, M0–M10, verification strategy, collaborator split. Initialised git; wired GitHub remote. No code written. | *(this commit)* |
 | 2026-08-29 | Master laptop | Master | 1 → 2 | Read and confirmed methodology. Ran full Phase 2 research (UAE government strategy, UAE AI hiring market, PV soiling + RL literature, free-data feasibility). Evaluated five candidate concepts; recommended RIMAL. Created `HANDOFF.md` and `PROGRESS.md`. No code written. | *(pre-repo)* |

@@ -1,0 +1,30 @@
+
+M2 ACCEPTANCE -- Gymnasium environment v0
+
+[1] Gymnasium API compliance
+  PASS  gymnasium.utils.env_checker passes: no violations reported
+  PASS  registers and builds via gym.make: Rimal-Cleaning-v0
+
+[2] Precomputed energy lookup vs the true pvlib chain
+  PASS  interpolated energy within 0.1% of pvlib at off-grid ratios: worst annual error 0.0019% across five off-grid ratios
+
+[3] Environment soiling matches the standalone soiling model
+  PASS  never-clean trajectory reproduces KimberSoiling exactly: max absolute deviation 0.00e+00 over 365 aligned days
+
+[4] Policy ordering (the check the plan declared)
+      policy               energy kWh   cleans     cost $      net $
+      never-clean           1,482,540        0          0     25,133
+      clean every 30d       1,740,448       13        780     28,726
+      always-clean          1,788,226      366     21,960      8,356
+  PASS  energy: always-clean > periodic > never-clean: 1,788,226 > 1,740,448 > 1,482,540 kWh
+  PASS  cost: always-clean > periodic > never-clean: 21,960 > 780 > 0 USD
+  PASS  never-clean incurs no cleaning cost and never cleans: 0 cleans, $0
+  PASS  always-clean holds the panel clean: mean soiling ratio 1.0000
+
+[5] Determinism and episode length
+  PASS  same seed and year reproduce the same rollout: net $28,725.82 on both runs
+  PASS  episode covers a full year: 366 steps for 2020 (a leap year)
+
+==============================================================
+M2 PASSED -- 10/10 checks
+==============================================================
