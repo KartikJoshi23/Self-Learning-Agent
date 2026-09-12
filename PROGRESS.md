@@ -166,7 +166,7 @@ episode that starts clean. Both fixed; trajectories now agree to **0.00e+00**.
 cost range fixed *before* the sweep ($25–150/MWp): some plausible cost must put the
 optimum in 28–34 days. **$60/MWp → 31 days and $75/MWp → 34 days**, both inside the
 published band. The swept optimum also tracks the closed form
-`T* = sqrt(730·C/(E·p·r))` to a mean 19%, consistently longer — as expected, since the
+`T* = sqrt(730·C/(E·p·r))` to a mean 19% (17.8% on the 2026-09-11 re-run), consistently longer — as expected, since the
 closed form ignores rain resets.
 
 **Default cleaning cost changed $300 → $60/MWp. This is a CALIBRATION, not a
@@ -307,6 +307,22 @@ the code trusts**, neither of which the suite does.
 
 **Verified on arrival, before any change:** `pytest` 183 passed · M0 11/11 · M1 10/10 ·
 M2 10/10 · M3 7/7. **Verified after:** see the session-log row and FINDINGS.md.
+
+### Audit of the review itself (2026-09-12, before starting the site)
+
+The strongest falsification of R1 is the one it claims to enable: **a fresh clone, fresh
+venv, empty cache, today's endpoint**. Done at a short temp path (`rf/`, deleted after).
+
+| # | Finding | Status |
+|---|---|---|
+| A1 | **`requirements.txt` had no `torch`** (headed "Core (M0–M3)"), so the README's `pip install -r requirements.txt && pytest -q` **failed at collection** on the fresh clone (`test_agents`, `test_risk`). | ✅ `torch>=2.4` added with the CPU-index note; README quick start updated. |
+| A2 | **Fresh clone reproduces the record.** From an empty cache against the live endpoint: **M0 13/13** (annual rainfall 89/172/408/… mm vs the Aug-29 cache's 89/173/409/… — the 0.7% rounding loss of the new product), M1 10/10, M2 10/10, and **M3's table byte-identical to `results/m3_verify.log`**. Full suite **194 passed** in the fresh venv. | ✅ Observed. |
+| A3 | **`export_sim_data.py --check` could never pass on a fresh clone**: it demanded byte-equality on `rain`, but the new upstream product's 2-dp rounding shifts ~340 of 1,096 daily values by ≤ 0.05 mm/day — with every wash day, cleaning day and energy figure identical (the node harness passed in the same clone). | ✅ Check now exact on `aod`/`clean`/`k`, rain within the documented 0.12 rounding bound **and** identical wash-day sets. Falsified: flags a threshold crossing inside the bound, an out-of-bound shift, a length change, any `aod`/`k` change. Passes in both clones. |
+| A4 | Stale figures in FINDINGS: falsification table said $50 → **27** days (log: 25); closed-form gap "19%" (log: 17.8%); "one seed collapsed to never-cleaning" no longer matched the re-run (2.3 cleans/yr). | ✅ Corrected from the logs. |
+| A5 | `IMPLEMENTATION-PLAN.md` still read "awaiting Master approval"; `RESEARCH.md` still listed the arXiv read as open. | ✅ Status lines corrected with pointers to the recorded deviations. |
+
+Not found: no drift between the master venv and a fresh install (both pandas 3.0.5 / numpy
+2.4.6 / pvlib 0.15.2 / torch 2.14.0+cpu).
 
 **Constraints:** no conflicts. ZERO COST (NASA POWER, node, torch-CPU) and LAPTOP-ONLY
 hold; `web/sim_data.json` is 26 KB of derived held-out data, not raw data.
@@ -561,7 +577,7 @@ Newest first. Every session appends one row before stopping.
 
 | Date | Machine | Who | Phase | What advanced | Commit |
 |---|---|---|---|---|---|
-| 2026-09-11 → 12 | Master laptop | Master | 4 (review) | **Reviewed all collaborator work since `55a5488` (Phase 5 applied).** Found and fixed two data-layer faults: **NASA POWER changed the units of hourly `PRECTOTCORR`** between 08-29 and 09-11 (mm/day rate → per-hour depth; a fresh clone computed 7.1 mm/yr instead of 171.4), now normalised against the daily product at fetch time; and the **2015 lead-in year was cached corrupted** (−99,000/h) and read back unchecked (1 Jan 2016 rain −16,498 mm/day) — cache files are now validated on read; 2015 refetched. M0 gained rainfall-integrity checks (13/13). **Re-ran M4–M7 on the corrected environment** and re-baselined every published number; logs committed under `results/`. **M5's declared criterion (b) did not replicate** (+$29, p = 0.165 vs the published +$64, p = 0.030) and is recorded as failed; `m6_verify.py` strengthened to 120-episode paired evaluation. Committed `scripts/export_sim_data.py` (reproduces the shipped simulator byte-for-byte) and `scripts/verify_simulator.py` (node harness: 8/8 against the engine), both under test. Recorded two unrecorded plan deviations (M5 recurrent PPO, M7 Lagrangian PPO). Tests 183 → 194. | *(this commit)* |
+| 2026-09-11 → 12 | Master laptop | Master | 4 (review) | **Reviewed all collaborator work since `55a5488` (Phase 5 applied).** Found and fixed two data-layer faults: **NASA POWER changed the units of hourly `PRECTOTCORR`** between 08-29 and 09-11 (mm/day rate → per-hour depth; a fresh clone computed 7.1 mm/yr instead of 171.4), now normalised against the daily product at fetch time; and the **2015 lead-in year was cached corrupted** (−99,000/h) and read back unchecked (1 Jan 2016 rain −16,498 mm/day) — cache files are now validated on read; 2015 refetched. M0 gained rainfall-integrity checks (13/13). **Re-ran M4–M7 on the corrected environment** and re-baselined every published number; logs committed under `results/`. **M5's declared criterion (b) did not replicate** (+$29, p = 0.165 vs the published +$64, p = 0.030) and is recorded as failed; `m6_verify.py` strengthened to 120-episode paired evaluation. **Audited the review from a fresh clone** (A1–A5 above): `requirements.txt` lacked torch, the sim-data check demanded a byte equality the new upstream precision can't give, three stale figures — all fixed; fresh clone reproduces M0–M3 and 194 tests. Committed `scripts/export_sim_data.py` (reproduces the shipped simulator byte-for-byte) and `scripts/verify_simulator.py` (node harness: 8/8 against the engine), both under test. Recorded two unrecorded plan deviations (M5 recurrent PPO, M7 Lagrangian PPO). Tests 183 → 194. | *(this commit)* |
 | 2026-09-10 → 11 | Master laptop | Collaborator session *(reconstructed)* | 4 | Browser simulator `web/simulator.html` (JS port of the physics, verified in node but the harness was not committed); fixed three bugs it exposed — an undocumented −99,000 rainfall fill passing the parser, the first configured year losing its first local day (now one year of lead-in), and the energy table not re-trimmed with the daily frame. Tests 176 → 183. Rewrote both HANDOFF.md prompts. **Did not update PROGRESS.md.** | `5c31785`, `32f4b1a` |
 | 2026-09-09 | Master laptop | Collaborator session *(reconstructed)* | 4 | Recorded the post-completion audit in PROGRESS.md. | `c24a2a2` |
 | 2026-09-05 | Master laptop | Collaborator session *(reconstructed)* | 4 | **M7** (storm soiling, water CMDP, QR-DQN; two defects in M1's model found first — the clipped tail and the frame-relative AOD reference). M4 archival re-run (5/5). M7 declared criterion re-examined and **failed** honestly. **Audit:** circular import that broke m3_verify for three milestones; M5 headline computed from 3 episodes (re-sampled at 120); M6 re-powered; README rewritten. m5_verify crash after every check fixed; static arity guard for all scripts. Tests 110 → 176. FINDINGS.md written. | `951779a` … `6a40797` |

@@ -52,8 +52,8 @@ Under the noisy performance-ratio signal a real plant actually measures, a naive
 git clone https://github.com/KartikJoshi23/Self-Learning-Agent.git
 cd Self-Learning-Agent
 python -m venv .venv && ./.venv/Scripts/activate    # Windows
-pip install -r requirements.txt
-pytest -q
+pip install -r requirements.txt                       # Linux: add --extra-index-url https://download.pytorch.org/whl/cpu for a CPU-only torch
+pytest -q                                             # network tests fetch NASA POWER once, then run from cache
 ```
 
 Every milestone has an acceptance script that **declares its criteria before the milestone is built** and prints pass/fail per check:

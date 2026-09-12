@@ -143,4 +143,4 @@ Recorded per `Problem-Solving-Skill.md` Phase 6: report reality, not intention.
 - All method citations in §4.
 
 ### Still open
-- **Read arXiv:2603.07518 in full** before Phase 3 design is frozen, to confirm exactly which of the four axes it leaves unaddressed. The abstract does not say.
+- ~~**Read arXiv:2603.07518 in full** before Phase 3 design is frozen, to confirm exactly which of the four axes it leaves unaddressed. The abstract does not say.~~ **Closed 2026-08-29 at M2:** read in full; soiling directly observable, cleaning a perfect reset (Eq. 4), synthetic weather, sparse 20-year reward. All four axes confirmed unclaimed; formulation recorded in `rimal/env/cleaning_env.py`.

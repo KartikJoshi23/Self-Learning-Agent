@@ -29,6 +29,19 @@ Usage:
 ``--check`` is the reproducibility guard: the shipped simulator must be what
 the engine produces today. ``scripts/verify_simulator.py`` then checks that
 the port's *physics* agrees with the engine on that data.
+
+What "the same" means for rainfall, and why it is not byte equality. The
+shipped data was exported from the project's canonical cache (fetched
+2026-08-29). NASA POWER has since changed the hourly rainfall product to a
+2-decimal per-hour depth, which ``rimal.data.power`` converts back to the
+canonical mm/day rate -- but the rounding is upstream and cannot be undone, so
+a fresh clone's daily rain differs from the cache by up to 24 x 0.005 mm per
+hour, in practice <= 0.05 mm/day (measured 2026-09-12: 340 of 1,096 values, max
+0.05). Nothing physical depends on that: rain acts through the 6 mm wash
+threshold, and no day moves across it. So ``--check`` requires ``aod``,
+``clean`` and ``k`` to match exactly, ``rain`` to match within the rounding
+bound, and the set of wash days to be identical. The rendered HTML is checked
+the same way, through the data it embeds.
 """
 
 from __future__ import annotations
@@ -52,6 +65,12 @@ TEMPLATE = WEB / "_simulator_template.html"
 DATA_JSON = WEB / "sim_data.json"
 SIMULATOR = WEB / "simulator.html"
 PLACEHOLDER = "__DATA__"
+
+#: Rain-wash threshold of the soiling models (mm/day); a rain value may differ
+#: from the shipped one only if it leaves this decision unchanged.
+RAIN_WASH_MM = 6.0
+#: Upstream rounding bound on canonical rainfall: 24 x 0.005 mm per hour.
+RAIN_TOLERANCE_MM = 0.12
 
 #: The simulator shows the held-out years under the storm soiling model --
 #: the M7 physics, which keeps the dust tail the earlier models clipped.
@@ -121,6 +140,41 @@ def render(data: dict) -> tuple[str, str]:
     return payload, template.replace(PLACEHOLDER, payload)
 
 
+def _embedded_data(text: str) -> dict:
+    """The data a shipped file carries: the JSON itself, or the HTML's DATA line."""
+    if text.lstrip().startswith("{"):
+        return json.loads(text)
+    for line in text.splitlines():
+        if line.startswith("const DATA = ") and line.endswith(";"):
+            return json.loads(line[len("const DATA = "):-1])
+    raise RuntimeError("no embedded DATA line found")
+
+
+def _differences(fresh: dict, shipped: dict) -> list[str]:
+    """Explain every way ``shipped`` fails to be what the engine produces."""
+    out = []
+    if fresh["meta"] != shipped.get("meta"):
+        out.append("meta differs")
+    if set(fresh["years"]) != set(shipped.get("years", {})):
+        out.append(f"years differ: {sorted(fresh['years'])} vs {sorted(shipped.get('years', {}))}")
+        return out
+    for year, columns in fresh["years"].items():
+        theirs = shipped["years"][year]
+        for key in ("aod", "clean", "k"):
+            if columns[key] != theirs.get(key):
+                out.append(f"{year} {key} differs")
+        ours, other = np.asarray(columns["rain"]), np.asarray(theirs.get("rain", []))
+        if ours.shape != other.shape:
+            out.append(f"{year} rain length differs")
+            continue
+        worst = float(np.abs(ours - other).max()) if len(ours) else 0.0
+        if worst > RAIN_TOLERANCE_MM:
+            out.append(f"{year} rain differs by {worst:.3f} mm/day, beyond the {RAIN_TOLERANCE_MM} rounding bound")
+        if not np.array_equal(ours > RAIN_WASH_MM, other > RAIN_WASH_MM):
+            out.append(f"{year} rain-wash days differ")
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="verify, do not write")
@@ -135,15 +189,21 @@ def main() -> int:
 
     targets = {DATA_JSON: payload, SIMULATOR: html}
     if args.check:
-        stale = [
-            p.name
-            for p, content in targets.items()
-            if not p.exists() or p.read_text(encoding="utf-8") != content
-        ]
-        if stale:
-            print(f"STALE: {', '.join(stale)} differ from what the engine produces")
+        problems = []
+        for path in targets:
+            if not path.exists():
+                problems.append(f"{path.name} is missing")
+                continue
+            shipped = _embedded_data(path.read_text(encoding="utf-8"))
+            problems += [f"{path.name}: {p}" for p in _differences(data, shipped)]
+        if problems:
+            print("STALE: " + "; ".join(problems))
             return 1
-        print("OK: web/sim_data.json and web/simulator.html match the engine")
+        print(
+            "OK: web/sim_data.json and web/simulator.html match the engine "
+            "(aod/clean/k exact; rain within the upstream rounding bound with "
+            "identical wash days)"
+        )
         return 0
 
     for path, content in targets.items():

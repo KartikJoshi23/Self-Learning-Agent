@@ -1,4 +1,4 @@
-# Core (M0-M3)
+# Core (M0-M3): data, physics, environment, baselines
 numpy>=2.1
 pandas>=2.2
 pyarrow>=17
@@ -7,6 +7,11 @@ requests>=2.32
 pvlib>=0.11
 gymnasium>=1.0
 matplotlib>=3.9
+
+# Agents (M4-M7): PPO and QR-DQN. CPU is all this project needs; on Linux the
+# default PyPI wheel bundles CUDA and is large, so prefer the CPU index:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
 
 # Test
 pytest>=8.0

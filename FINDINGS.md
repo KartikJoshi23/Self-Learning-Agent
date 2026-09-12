@@ -65,12 +65,12 @@ Before any agent was trained, the simulator had to reproduce the literature. The
 
 | cleaning cost | simulated optimum | analytic closed form |
 |---|---|---|
-| $50/MWp | 27 days | 22.8 |
+| $50/MWp | 25 days | 22.8 |
 | **$60/MWp** | **31 days** ✅ | 25.0 |
 | **$75/MWp** | **34 days** ✅ | 28.0 |
 | $150/MWp | 46 days | 39.6 |
 
-Published values: **28 days** (commonly recommended, UAE) and **34 days** (reported optimal, Abu Dhabi). Both reproduced at a plausible cost. The swept optimum also tracks an independent closed form to within a mean 19%, consistently longer — the right direction, since the closed form ignores rain resets.
+Published values: **28 days** (commonly recommended, UAE) and **34 days** (reported optimal, Abu Dhabi). Both reproduced at a plausible cost. The swept optimum also tracks an independent closed form to within a mean 18%, consistently longer — the right direction, since the closed form ignores rain resets.
 
 **Also reported rather than hidden:** the optimum is genuinely *flat*. Any interval from **16 to 57 days** sits within 1% of optimal. Quoting the argmax alone would badly overstate how well-determined it is — and it reframes the problem, because if fixed intervals are that insensitive, a learned agent's edge was never going to come from picking a better interval.
 
@@ -105,7 +105,7 @@ It is worth being blunt about what that means: **M7's declared criterion was rec
 ## What we would tell DEWA
 
 1. **Invest in soiling estimation, not in a learned controller.** A Kalman filter over the performance ratio reduced soiling-estimate error **17.7×** and made cleaning decisions essentially immune to sensor noise that destroys a naive rule. DEWA's patented Autonomous Soiling Detector is the right layer to build on.
-2. **A tuned condition-based threshold is close to optimal, and deployable.** It beat every learned agent we trained, has no collapse mode, and is inspectable. One PPO seed in five collapsed to never-cleaning — a policy that fails silently 20% of the time is not deployable at a 5 GW asset.
+2. **A tuned condition-based threshold is close to optimal, and deployable.** It beat every learned agent we trained, has no collapse mode, and is inspectable. In each of two five-seed PPO runs on the fleet environment one seed collapsed toward never-cleaning (0.3 and 2.3 cleans a year) — a policy that fails silently 20% of the time is not deployable at a 5 GW asset.
 3. **Do not over-invest in fleet optimisation.** Choosing between cleaning robots is second-order at this plant's economics. A learned efficacy estimator ranked the fleet *perfectly* (Spearman ρ = 1.00) and still lost, because the exploration is paid for in $60 cleans and there are only 5–42 of them a year.
 4. **Water is a constraint, not a cost.** Meeting a hard annual water budget cost **$37/MWp/yr (0.14%)** at the tightest budget, with 100% satisfaction at every budget. Its energy content is ~1% of the energy recovered — real for the UAE Water Security Strategy 2036, negligible for economics.
 5. **Storms are where the remaining risk lives.** Modelling them properly moves CVaR@5% by ~$391/MWp/yr and creates the only genuine risk/return trade-off we found: buying $62 of tail protection costs $55 of mean.

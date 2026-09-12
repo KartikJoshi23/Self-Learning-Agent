@@ -1,6 +1,6 @@
 # IMPLEMENTATION-PLAN.md — Phase 3 Proposal (RIMAL)
 
-**Status:** ⏳ Proposed — **awaiting Master approval**. No code may be written until this is approved.
+**Status:** ✅ **Tier 1 (M0–M4) and Tier 2 (M5–M7) approved by the Master 2026-08-29 and complete** (see [PROGRESS.md](PROGRESS.md)). Tier 3 (M8–M10) is **not approved**; its scope is being redefined in the light of the result. Deviations from this plan as built are recorded in PROGRESS.md under M1 (HSU → AOD-modulated soiling), M5 (recurrent PPO → belief-state wrapper) and M7 (Lagrangian PPO not built).
 **Depends on:** [RESEARCH.md](RESEARCH.md) (approved concept, post-audit).
 **Governed by:** [Problem-Solving-Skill.md](Problem-Solving-Skill.md).
 
